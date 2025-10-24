@@ -1,4 +1,3 @@
-
 import React, { useReducer, useMemo, useState, useEffect, useCallback } from 'react';
 import SessionSidebar from './components/SessionSidebar';
 import ReceiptDisplay from './components/ReceiptDisplay';
@@ -403,7 +402,10 @@ const App: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                 </svg>
             </button>
-            <h1 className="text-2xl font-bold text-on-primary dark:text-text-primary-dark">AI Bill Splitter</h1>
+            <h1 className="text-2xl font-bold text-on-primary dark:text-text-primary-dark">
+              Splitly
+              <span className="text-secondary dark:text-secondary-dark font-semibold ml-1">AI</span>
+            </h1>
           </div>
           <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-full text-on-primary dark:text-text-primary-dark hover:bg-white/10 dark:hover:bg-primary-dark/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-primary-dark focus:ring-white" aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
               {theme === 'dark' ? (
