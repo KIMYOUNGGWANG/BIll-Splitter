@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { ToastMessage, ToastType } from '../types';
 
@@ -26,9 +27,9 @@ const ICONS: Record<ToastType, React.ReactElement> = {
 };
 
 const STYLES: Record<ToastType, { bg: string; text: string; icon: string; }> = {
-  success: { bg: 'bg-green-500 dark:bg-green-600', text: 'text-white', icon: 'text-white' },
-  error: { bg: 'bg-red-500 dark:bg-red-600', text: 'text-white', icon: 'text-white' },
-  info: { bg: 'bg-blue-500 dark:bg-blue-600', text: 'text-white', icon: 'text-white' },
+  success: { bg: 'bg-green-500/90 dark:bg-green-600/90', text: 'text-white', icon: 'text-white' },
+  error: { bg: 'bg-red-500/90 dark:bg-red-600/90', text: 'text-white', icon: 'text-white' },
+  info: { bg: 'bg-blue-500/90 dark:bg-blue-600/90', text: 'text-white', icon: 'text-white' },
 };
 
 const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
@@ -55,7 +56,7 @@ const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
     : 'animate-[fade-in-right_0.3s_ease-out_forwards]';
 
   return (
-    <div className={`flex items-start w-full p-4 rounded-lg shadow-lg text-sm ${styles.bg} ${styles.text} ${animationClass}`}>
+    <div className={`flex items-start w-full p-4 rounded-lg shadow-lg text-sm backdrop-blur-sm ${styles.bg} ${styles.text} ${animationClass}`}>
       <div className={`flex-shrink-0 mr-3 ${styles.icon}`}>
         {ICONS[type]}
       </div>

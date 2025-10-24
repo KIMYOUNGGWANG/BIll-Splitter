@@ -14,6 +14,8 @@ const initialState: AppState = {
   activeSessionId: null,
 };
 
+const MAX_UNDO_HISTORY = 10;
+
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'ADD_SESSIONS':
@@ -82,6 +84,14 @@ function appReducer(state: AppState, action: AppAction): AppState {
             ...state,
             sessions: state.sessions.map(session => {
                 if (session.id !== sessionId) return session;
+
+                const pushToHistory = (currentAssignments: Assignments, history: Assignments[]): Assignments[] => {
+                    const newHistory = [...history, currentAssignments];
+                    if (newHistory.length > MAX_UNDO_HISTORY) {
+                        newHistory.shift();
+                    }
+                    return newHistory;
+                };
                 
                 switch (action.type) {
                   case 'SET_PEOPLE': {
@@ -117,8 +127,9 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     }
 
                     const updatedPeople = [...new Set([...session.people, ...newPeople])];
+                    const newHistory = pushToHistory(oldAssignments, session.assignmentsHistory);
 
-                    return { ...session, status: 'ready', assignments: newAssignments, lastAssignmentsState: oldAssignments, people: updatedPeople, chatHistory: [...session.chatHistory, ...newMessages] };
+                    return { ...session, status: 'ready', assignments: newAssignments, assignmentsHistory: newHistory, people: updatedPeople, chatHistory: [...session.chatHistory, ...newMessages] };
                   }
                   
                   case 'SEND_MESSAGE_ERROR':
@@ -131,7 +142,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     
                     const message = formatAssignmentMessage(item.name, newNames);
                     const newAssignments = { ...session.assignments, [itemId]: newNames };
-                    return { ...session, assignments: newAssignments, lastAssignmentsState: session.assignments, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+                    const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
+                    return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
                   }
 
                   case 'EDIT_PERSON_NAME': {
@@ -141,7 +153,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     for (const itemId in session.assignments) {
                       updatedAssignments[itemId] = session.assignments[itemId].map(p => p === oldName ? newName : p);
                     }
-                    // This is not an undoable assignment action, so we don't save the state.
+                    // This is not an undoable assignment action, so we don't save the history.
                     return { ...session, people: updatedPeople, assignments: updatedAssignments };
                   }
 
@@ -164,7 +176,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     }
 
                     const message = `Assigned ${itemsAssignedCount} remaining item(s) to ${personName}.`;
-                    return { ...session, assignments: newAssignments, lastAssignmentsState: session.assignments, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+                    const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
+                    return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
                   }
                   
                   case 'SPLIT_ALL_EQUALLY': {
@@ -176,17 +189,20 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     }
 
                     const message = `All items have been split equally among ${session.people.length} people.`;
-                    return { ...session, assignments: newAssignments, lastAssignmentsState: session.assignments, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+                    const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
+                    return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
                   }
 
                   case 'UNDO_LAST_ASSIGNMENT': {
-                      if (!session.lastAssignmentsState) {
+                      if (session.assignmentsHistory.length === 0) {
                           return session;
                       }
+                      const newHistory = [...session.assignmentsHistory];
+                      const lastState = newHistory.pop();
                       return {
                           ...session,
-                          assignments: session.lastAssignmentsState,
-                          lastAssignmentsState: null,
+                          assignments: lastState!,
+                          assignmentsHistory: newHistory,
                           chatHistory: [...session.chatHistory, { sender: 'system', text: 'Last assignment action undone.'}]
                       };
                   }
@@ -259,7 +275,7 @@ const App: React.FC = () => {
         const id = i === 0 ? firstId : `session-${Date.now()}-${Math.random()}`;
         newSessions.push({
             id: id, name: file.name, status: 'parsing', errorMessage: null,
-            parsedReceipt: null, assignments: {}, lastAssignmentsState: null, chatHistory: [], people: []
+            parsedReceipt: null, assignments: {}, assignmentsHistory: [], chatHistory: [], people: []
         });
     }
 
@@ -353,7 +369,7 @@ const App: React.FC = () => {
   }, [activeSession]);
 
   const handleUndoLastAssignment = useCallback(() => {
-    if (activeSession?.lastAssignmentsState) {
+    if (activeSession?.assignmentsHistory && activeSession.assignmentsHistory.length > 0) {
         dispatch({ type: 'UNDO_LAST_ASSIGNMENT', payload: { sessionId: activeSession.id } });
     } else {
         addToast("Nothing to undo.", "info");
@@ -433,7 +449,7 @@ const App: React.FC = () => {
                             receipt={activeSession.parsedReceipt}
                             assignments={activeSession.assignments}
                             people={activeSession.people}
-                            isUndoable={!!activeSession.lastAssignmentsState}
+                            isUndoable={activeSession.assignmentsHistory.length > 0}
                             onUpdateAssignment={handleDirectAssignment}
                             onAssignAllUnassigned={handleAssignAllUnassigned}
                             onSplitAllEqually={handleSplitAllEqually}

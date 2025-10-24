@@ -57,7 +57,7 @@ export interface ReceiptSession {
   errorMessage: string | null;
   parsedReceipt: ParsedReceipt | null;
   assignments: Assignments;
-  lastAssignmentsState: Assignments | null; // For undo functionality
+  assignmentsHistory: Assignments[]; // For multi-level undo functionality
   chatHistory: ChatMessage[];
   people: string[];
 }

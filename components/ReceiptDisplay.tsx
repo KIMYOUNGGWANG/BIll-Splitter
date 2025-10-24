@@ -205,7 +205,9 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
                           className="px-2 py-1 text-xs font-semibold text-primary dark:text-primary-dark bg-primary/10 dark:bg-primary-dark/10 hover:bg-primary/20 dark:hover:bg-primary-dark/20 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                           aria-label="Undo last assignment"
                       >
-                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M12.78 4.22a.75.75 0 0 1 0 1.06L8.81 9.25l3.97 3.97a.75.75 0 1 1-1.06 1.06L7.75 10.31l-3.97 3.97a.75.75 0 0 1-1.06-1.06L6.69 9.25l-3.97-3.97a.75.75 0 0 1 1.06-1.06l3.97 3.97 3.97-3.97a.75.75 0 0 1 1.06 0Z" clipRule="evenodd" /></svg>
+                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                              <path fillRule="evenodd" d="M7.793 2.232a.75.75 0 0 1-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 0 1 0 10.75H10.75a.75.75 0 0 1 0-1.5h2.875a3.875 3.875 0 0 0 0-7.75H3.622l4.146 3.957a.75.75 0 0 1-1.036 1.085l-5.5-5.25a.75.75 0 0 1 0-1.085l5.5-5.25a.75.75 0 0 1 1.06.025Z" clipRule="evenodd" />
+                           </svg>
                           Undo
                       </button>
                   )}
