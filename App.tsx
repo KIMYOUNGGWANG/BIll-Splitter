@@ -1,11 +1,12 @@
 
-import React, { useReducer, useMemo, useState, useEffect } from 'react';
+import React, { useReducer, useMemo, useState, useEffect, useCallback } from 'react';
 import SessionSidebar from './components/SessionSidebar';
 import ReceiptDisplay from './components/ReceiptDisplay';
 import ChatInterface from './components/ChatInterface';
 import { parseReceipt, updateAssignments } from './services/geminiService';
 import { calculateBillSummary } from './utils/billCalculator';
 import { formatAssignmentMessage, formatAssignmentUpdateMessage } from './utils/messageFormatter';
+import { useToast } from './context/ToastContext';
 import type { AppState, AppAction, Assignments, ReceiptSession, ChatMessage } from './types';
 
 const initialState: AppState = {
@@ -117,7 +118,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
 
                     const updatedPeople = [...new Set([...session.people, ...newPeople])];
 
-                    return { ...session, status: 'ready', assignments: newAssignments, people: updatedPeople, chatHistory: [...session.chatHistory, ...newMessages] };
+                    return { ...session, status: 'ready', assignments: newAssignments, lastAssignmentsState: oldAssignments, people: updatedPeople, chatHistory: [...session.chatHistory, ...newMessages] };
                   }
                   
                   case 'SEND_MESSAGE_ERROR':
@@ -130,27 +131,18 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     
                     const message = formatAssignmentMessage(item.name, newNames);
                     const newAssignments = { ...session.assignments, [itemId]: newNames };
-                    return { ...session, assignments: newAssignments, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+                    return { ...session, assignments: newAssignments, lastAssignmentsState: session.assignments, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
                   }
 
                   case 'EDIT_PERSON_NAME': {
                     const { oldName, newName } = action.payload;
-                    const trimmedNewName = newName.trim();
-
-                    if (!trimmedNewName) {
-                      return { ...session, chatHistory: [...session.chatHistory, { sender: 'system', text: `Error: Name cannot be empty.` }] };
-                    }
-                    if (session.people.map(p => p.toLowerCase()).includes(trimmedNewName.toLowerCase()) && oldName.toLowerCase() !== trimmedNewName.toLowerCase()) {
-                      return { ...session, chatHistory: [...session.chatHistory, { sender: 'system', text: `Error: Name '${trimmedNewName}' already exists.` }] };
-                    }
-                    if (oldName === trimmedNewName) return session;
-
-                    const updatedPeople = session.people.map(p => p === oldName ? trimmedNewName : p);
+                    const updatedPeople = session.people.map(p => p === oldName ? newName : p);
                     const updatedAssignments: Assignments = {};
                     for (const itemId in session.assignments) {
-                      updatedAssignments[itemId] = session.assignments[itemId].map(p => p === oldName ? trimmedNewName : p);
+                      updatedAssignments[itemId] = session.assignments[itemId].map(p => p === oldName ? newName : p);
                     }
-                    return { ...session, people: updatedPeople, assignments: updatedAssignments, chatHistory: [...session.chatHistory, { sender: 'system', text: `Name updated: '${oldName}' is now '${trimmedNewName}'.` }] };
+                    // This is not an undoable assignment action, so we don't save the state.
+                    return { ...session, people: updatedPeople, assignments: updatedAssignments };
                   }
 
                   case 'ASSIGN_ALL_UNASSIGNED': {
@@ -172,7 +164,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     }
 
                     const message = `Assigned ${itemsAssignedCount} remaining item(s) to ${personName}.`;
-                    return { ...session, assignments: newAssignments, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+                    return { ...session, assignments: newAssignments, lastAssignmentsState: session.assignments, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
                   }
                   
                   case 'SPLIT_ALL_EQUALLY': {
@@ -184,7 +176,19 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     }
 
                     const message = `All items have been split equally among ${session.people.length} people.`;
-                    return { ...session, assignments: newAssignments, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+                    return { ...session, assignments: newAssignments, lastAssignmentsState: session.assignments, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+                  }
+
+                  case 'UNDO_LAST_ASSIGNMENT': {
+                      if (!session.lastAssignmentsState) {
+                          return session;
+                      }
+                      return {
+                          ...session,
+                          assignments: session.lastAssignmentsState,
+                          lastAssignmentsState: null,
+                          chatHistory: [...session.chatHistory, { sender: 'system', text: 'Last assignment action undone.'}]
+                      };
                   }
                   
                   case 'CLEAR_CHAT_HISTORY': {
@@ -204,6 +208,7 @@ const App: React.FC = () => {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const { sessions, activeSessionId } = state;
   const activeSession = sessions.find(s => s.id === activeSessionId) || null;
+  const { addToast } = useToast();
   
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('theme')) {
@@ -245,7 +250,7 @@ const App: React.FC = () => {
     });
   };
 
-  const handleAddReceipts = async (files: FileList) => {
+  const handleAddReceipts = useCallback(async (files: FileList) => {
     const newSessions: ReceiptSession[] = [];
     const firstId = `session-${Date.now()}-${Math.random()}`;
 
@@ -254,7 +259,7 @@ const App: React.FC = () => {
         const id = i === 0 ? firstId : `session-${Date.now()}-${Math.random()}`;
         newSessions.push({
             id: id, name: file.name, status: 'parsing', errorMessage: null,
-            parsedReceipt: null, assignments: {}, chatHistory: [], people: []
+            parsedReceipt: null, assignments: {}, lastAssignmentsState: null, chatHistory: [], people: []
         });
     }
 
@@ -277,23 +282,24 @@ const App: React.FC = () => {
             }
         });
     }
-  };
+  }, []);
   
-  const handleSwitchSession = (sessionId: string) => {
+  const handleSwitchSession = useCallback((sessionId: string) => {
     dispatch({ type: 'SWITCH_SESSION', payload: sessionId });
     setSidebarVisible(false);
-  }
-  const handleDeleteSession = (sessionId: string) => dispatch({ type: 'DELETE_SESSION', payload: sessionId });
+  }, []);
 
-  const handleSetPeople = (namesInput: string) => {
+  const handleDeleteSession = useCallback((sessionId: string) => dispatch({ type: 'DELETE_SESSION', payload: sessionId }), []);
+
+  const handleSetPeople = useCallback((namesInput: string) => {
     if (!activeSession) return;
     const names = namesInput.split(',').map(name => name.trim()).filter(Boolean);
     if (names.length > 0) {
       dispatch({ type: 'SET_PEOPLE', payload: { sessionId: activeSession.id, names, userInput: namesInput } });
     }
-  };
+  }, [activeSession]);
 
-  const handleSendMessage = async (message: string) => {
+  const handleSendMessage = useCallback(async (message: string) => {
     if (!activeSession || !activeSession.parsedReceipt) return;
     dispatch({ type: 'SEND_MESSAGE_START', payload: { sessionId: activeSession.id, message } });
     try {
@@ -306,32 +312,66 @@ const App: React.FC = () => {
       const errorMsg = error instanceof Error ? error.message : 'An unknown error occurred.';
       dispatch({ type: 'SEND_MESSAGE_ERROR', payload: { sessionId: activeSession.id, message: errorMsg } });
     }
-  };
+  }, [activeSession]);
   
-  const handleDirectAssignment = (itemId: string, newNames: string[]) => {
+  const handleDirectAssignment = useCallback((itemId: string, newNames: string[]) => {
     if (!activeSession) return;
     dispatch({ type: 'DIRECT_ASSIGNMENT', payload: { sessionId: activeSession.id, itemId, newNames } });
-  };
+  }, [activeSession]);
   
-  const handleEditPersonName = (oldName: string, newName: string) => {
+  const handleEditPersonName = useCallback((oldName: string, newName: string) => {
     if (!activeSession) return;
-    dispatch({ type: 'EDIT_PERSON_NAME', payload: { sessionId: activeSession.id, oldName, newName } });
-  };
+    const trimmedNewName = newName.trim();
 
-  const handleAssignAllUnassigned = (personName: string) => {
+    if (!trimmedNewName) {
+      addToast('Name cannot be empty.', 'error');
+      return;
+    }
+    if (activeSession.people.map(p => p.toLowerCase()).includes(trimmedNewName.toLowerCase()) && oldName.toLowerCase() !== trimmedNewName.toLowerCase()) {
+      addToast(`Name '${trimmedNewName}' already exists.`, 'error');
+      return;
+    }
+    if (oldName === trimmedNewName) return;
+
+    dispatch({ type: 'EDIT_PERSON_NAME', payload: { sessionId: activeSession.id, oldName, newName: trimmedNewName } });
+    addToast(`Name updated: '${oldName}' is now '${trimmedNewName}'.`, 'success');
+  }, [activeSession, addToast]);
+
+  const handleAssignAllUnassigned = useCallback((personName: string) => {
     if (!activeSession) return;
     dispatch({ type: 'ASSIGN_ALL_UNASSIGNED', payload: { sessionId: activeSession.id, personName } });
-  };
+  }, [activeSession]);
   
-  const handleSplitAllEqually = () => {
+  const handleSplitAllEqually = useCallback(() => {
     if (!activeSession) return;
     dispatch({ type: 'SPLIT_ALL_EQUALLY', payload: { sessionId: activeSession.id } });
-  };
+  }, [activeSession]);
 
-  const handleClearChat = () => {
+  const handleClearChat = useCallback(() => {
     if (!activeSession) return;
     dispatch({ type: 'CLEAR_CHAT_HISTORY', payload: { sessionId: activeSession.id } });
-  };
+  }, [activeSession]);
+
+  const handleUndoLastAssignment = useCallback(() => {
+    if (activeSession?.lastAssignmentsState) {
+        dispatch({ type: 'UNDO_LAST_ASSIGNMENT', payload: { sessionId: activeSession.id } });
+    } else {
+        addToast("Nothing to undo.", "info");
+    }
+  }, [activeSession, addToast]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        handleUndoLastAssignment();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleUndoLastAssignment]);
 
   return (
     <div className="h-screen bg-background dark:bg-background-dark font-sans flex flex-col">
@@ -393,9 +433,11 @@ const App: React.FC = () => {
                             receipt={activeSession.parsedReceipt}
                             assignments={activeSession.assignments}
                             people={activeSession.people}
+                            isUndoable={!!activeSession.lastAssignmentsState}
                             onUpdateAssignment={handleDirectAssignment}
                             onAssignAllUnassigned={handleAssignAllUnassigned}
                             onSplitAllEqually={handleSplitAllEqually}
+                            onUndoLastAssignment={handleUndoLastAssignment}
                             isInteractive={activeSession.status === 'ready'}
                         />
                     )}

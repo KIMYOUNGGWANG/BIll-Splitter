@@ -10,6 +10,7 @@ export interface ParsedReceipt {
   items: ReceiptItem[];
   subtotal: number;
   tax: number;
+
   tip: number;
 }
 
@@ -40,6 +41,14 @@ export interface ChatMessage {
 
 export type AppStatus = 'initial' | 'parsing' | 'awaiting_names' | 'ready' | 'assigning' | 'error';
 
+export type ToastType = 'success' | 'error' | 'info';
+
+export interface ToastMessage {
+  id: number;
+  message: string;
+  type: ToastType;
+}
+
 // State Management for a single receipt
 export interface ReceiptSession {
   id: string;
@@ -48,6 +57,7 @@ export interface ReceiptSession {
   errorMessage: string | null;
   parsedReceipt: ParsedReceipt | null;
   assignments: Assignments;
+  lastAssignmentsState: Assignments | null; // For undo functionality
   chatHistory: ChatMessage[];
   people: string[];
 }
@@ -74,4 +84,5 @@ export type AppAction =
   | { type: 'ASSIGN_ALL_UNASSIGNED'; payload: { sessionId: string; personName: string } }
   | { type: 'SPLIT_ALL_EQUALLY'; payload: { sessionId: string } }
   | { type: 'CLEAR_CHAT_HISTORY'; payload: { sessionId: string } }
+  | { type: 'UNDO_LAST_ASSIGNMENT'; payload: { sessionId: string } }
   | { type: 'RESET_APP' };

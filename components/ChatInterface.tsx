@@ -1,12 +1,13 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { ChatMessage, BillSummary, AppStatus, ParsedReceipt, ReceiptSession } from '../types';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { ChatMessage, BillSummary, ReceiptSession } from '../types';
 import { exportBillSummary, shareBillSummary } from '../utils/billExporter';
+import { useToast } from '../context/ToastContext';
 import ConfirmationModal from './ConfirmationModal';
 
 interface BillSummaryProps {
   summary: BillSummary;
-  receipt: ParsedReceipt | null;
+  receipt: ReceiptSession['parsedReceipt'];
   receiptName: string;
   isInteractive: boolean;
   onEditPersonName: (oldName: string, newName: string) => void;
@@ -18,8 +19,8 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, re
     const [editingName, setEditingName] = useState<string | null>(null);
     const [expandedName, setExpandedName] = useState<string | null>(null);
     const [newNameInput, setNewNameInput] = useState('');
-    const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle');
     const inputRef = useRef<HTMLInputElement>(null);
+    const { addToast } = useToast();
 
     useEffect(() => {
         if (editingName && inputRef.current) {
@@ -32,39 +33,38 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, re
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
     };
 
-    const handleEditClick = (name: string) => {
+    const handleEditClick = useCallback((name: string) => {
         setEditingName(name);
         setNewNameInput(name);
         setExpandedName(null); // Collapse when editing starts
-    };
+    }, []);
 
-    const handleCancel = () => {
+    const handleCancel = useCallback(() => {
         setEditingName(null);
         setNewNameInput('');
-    };
+    }, []);
 
-    const handleSave = () => {
+    const handleSave = useCallback(() => {
         if (editingName) {
             onEditPersonName(editingName, newNameInput);
         }
         handleCancel();
-    };
+    }, [editingName, newNameInput, onEditPersonName, handleCancel]);
 
-    const handleKeyDown = (event: React.KeyboardEvent) => {
+    const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
         if (event.key === 'Enter') {
             handleSave();
         } else if (event.key === 'Escape') {
             handleCancel();
         }
-    };
+    }, [handleSave, handleCancel]);
     
-    const handleShare = async () => {
+    const handleShare = useCallback(async () => {
       const success = await shareBillSummary(summary, receipt, receiptName);
       if (success && !navigator.share) { // Only show copied status if it was a clipboard action
-          setShareStatus('copied');
-          setTimeout(() => setShareStatus('idle'), 2000);
+          addToast('Summary copied to clipboard!', 'success');
       }
-    };
+    }, [summary, receipt, receiptName, addToast]);
 
     const progressPercentage = totalItemsCount > 0 ? (assignedItemsCount / totalItemsCount) * 100 : 0;
     const isComplete = totalItemsCount > 0 && assignedItemsCount === totalItemsCount;
@@ -83,12 +83,8 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, re
                  <h3 className="text-lg font-bold text-text-primary dark:text-text-primary-dark">Who Owes What</h3>
                  {summary.length > 0 && (
                     <div className="flex items-center gap-2">
-                        <button onClick={handleShare} className="p-2 rounded-full text-text-secondary dark:text-text-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600" aria-label={shareStatus === 'copied' ? 'Copied!' : (navigator.share ? 'Share summary' : 'Copy summary')}>
-                            {shareStatus === 'copied' ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-green-500"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.052-.143Z" clipRule="evenodd" /></svg>
-                            ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M13 4.5a2.5 2.5 0 1 1 .702 4.864l-3.5 3.5a2.5 2.5 0 1 1-3.536-3.536l2.05-2.05a.75.75 0 0 1 1.06 1.06l-2.05 2.05a1 1 0 1 0 1.414 1.414l3.5-3.5a1 1 0 0 0-1.414-1.414L10.91 8.586A2.5 2.5 0 0 1 13 4.5ZM7 15.5a2.5 2.5 0 1 1-.702-4.864l3.5-3.5a2.5 2.5 0 1 1 3.536 3.536l-2.05 2.05a.75.75 0 0 1-1.06-1.06l2.05-2.05a1 1 0 1 0-1.414-1.414l-3.5 3.5a1 1 0 0 0 1.414 1.414L9.09 11.414A2.5 2.5 0 0 1 7 15.5Z" /></svg>
-                            )}
+                        <button onClick={handleShare} className="p-2 rounded-full text-text-secondary dark:text-text-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600" aria-label={navigator.share ? 'Share summary' : 'Copy summary'}>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M13 4.5a2.5 2.5 0 1 1 .702 4.864l-3.5 3.5a2.5 2.5 0 1 1-3.536-3.536l2.05-2.05a.75.75 0 0 1 1.06 1.06l-2.05 2.05a1 1 0 1 0 1.414 1.414l3.5-3.5a1 1 0 0 0-1.414-1.414L10.91 8.586A2.5 2.5 0 0 1 13 4.5ZM7 15.5a2.5 2.5 0 1 1-.702-4.864l3.5-3.5a2.5 2.5 0 1 1 3.536 3.536l-2.05 2.05a.75.75 0 0 1-1.06-1.06l2.05-2.05a1 1 0 1 0-1.414-1.414l-3.5 3.5a1 1 0 0 0 1.414 1.414L9.09 11.414A2.5 2.5 0 0 1 7 15.5Z" /></svg>
                         </button>
                          <button onClick={() => exportBillSummary(summary, receipt, receiptName)} className="p-2 rounded-full text-text-secondary dark:text-text-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600" aria-label="Export summary">
                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" /><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" /></svg>
@@ -226,9 +222,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, []);
   
   useEffect(() => {
     if (textareaRef.current) {
@@ -237,11 +233,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
     }
   }, [input]);
 
-  useEffect(scrollToBottom, [messages]);
+  useEffect(scrollToBottom, [messages, scrollToBottom]);
   
   useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.key.toLowerCase() === 'k') {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         textareaRef.current?.focus();
       }
@@ -252,14 +248,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
     };
   }, []);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  };
-
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = useCallback((e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim() || !activeSession) return;
 
@@ -269,12 +258,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
         onSendMessage(input.trim());
     }
     setInput('');
-  };
+  }, [input, activeSession, onSetPeople, onSendMessage]);
 
-  const handleConfirmClearChat = () => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  }, [handleSubmit]);
+
+  const handleConfirmClearChat = useCallback(() => {
     onClearChat();
     setIsClearConfirmOpen(false);
-  };
+  }, [onClearChat]);
 
   const getPlaceholderText = () => {
     if (!activeSession) return "Loading...";
@@ -396,7 +392,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
             isOpen={isClearConfirmOpen}
             onClose={() => setIsClearConfirmOpen(false)}
             onConfirm={handleConfirmClearChat}
-            title="Clear Chat History?"
+            title="Clear Chat History"
             message="Are you sure you want to clear the chat history for this receipt? This action cannot be undone, but item assignments will not be affected."
         />
     </>

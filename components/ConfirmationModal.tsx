@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -7,10 +7,32 @@ interface ConfirmationModalProps {
   onConfirm: () => void;
   title: string;
   message: string;
+  variant?: 'primary' | 'destructive';
 }
 
-const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, title, message }) => {
+const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, title, message, variant = 'destructive' }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      } else if (event.key === 'Enter') {
+        onConfirm();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose, onConfirm]);
+  
   if (!isOpen) return null;
+
+  const confirmButtonClasses = variant === 'destructive'
+    ? 'bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800'
+    : 'bg-primary dark:bg-primary-dark hover:bg-primary-focus dark:hover:bg-primary-focus-dark';
 
   return (
     <div
@@ -39,7 +61,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, 
           </button>
           <button
             onClick={onConfirm}
-            className="px-4 py-2 text-sm font-semibold text-on-primary dark:text-on-primary-dark bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 rounded-md transition-colors"
+            className={`px-4 py-2 text-sm font-semibold text-on-primary dark:text-on-primary-dark rounded-md transition-colors ${confirmButtonClasses}`}
           >
             Confirm
           </button>

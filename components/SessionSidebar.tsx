@@ -1,5 +1,5 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import type { ReceiptSession } from '../types';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -40,15 +40,15 @@ const SessionItem: React.FC<{ session: ReceiptSession; isActive: boolean; onSwit
     }
   };
   
-  const handleDeleteClick = (e: React.MouseEvent) => {
+  const handleDeleteClick = useCallback((e: React.MouseEvent) => {
       e.stopPropagation();
       setIsDeleteConfirmOpen(true);
-  }
+  }, []);
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = useCallback(() => {
     onDelete();
     setIsDeleteConfirmOpen(false);
-  }
+  }, [onDelete]);
 
   return (
     <>
@@ -79,7 +79,7 @@ const SessionItem: React.FC<{ session: ReceiptSession; isActive: boolean; onSwit
             isOpen={isDeleteConfirmOpen}
             onClose={() => setIsDeleteConfirmOpen(false)}
             onConfirm={handleConfirmDelete}
-            title="Delete Receipt?"
+            title="Delete Receipt"
             message={`Are you sure you want to delete the receipt "${session.name}"? This action cannot be undone.`}
         />
     </>
@@ -90,17 +90,17 @@ const SessionItem: React.FC<{ session: ReceiptSession; isActive: boolean; onSwit
 const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSessionId, isVisible, onAddReceipts, onSwitchSession, onDeleteSession, onClose }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleAddClick = () => {
+  const handleAddClick = useCallback(() => {
     fileInputRef.current?.click();
-  };
+  }, []);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
       onAddReceipts(event.target.files);
       event.target.value = '';
     }
     onClose();
-  };
+  }, [onAddReceipts, onClose]);
 
   return (
     <>

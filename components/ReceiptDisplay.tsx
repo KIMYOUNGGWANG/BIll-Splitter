@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { ParsedReceipt, Assignments, ReceiptItem } from '../types';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -36,26 +36,26 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
   const assignedNames = assignments[item.id];
   const isAssigned = assignedNames && assignedNames.length > 0;
 
-  const getAssignedNamesText = () => {
+  const getAssignedNamesText = useCallback(() => {
     if (!isAssigned) {
       return 'Unassigned';
     }
     return assignedNames.join(', ');
-  };
+  }, [isAssigned, assignedNames]);
 
-  const handleEdit = () => {
+  const handleEdit = useCallback(() => {
     setSelectedNames(assignments[item.id] || []);
     onEditClick(item.id);
-  };
+  }, [assignments, item.id, onEditClick]);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     onUpdateAssignment(item.id, selectedNames);
-  };
+  }, [item.id, selectedNames, onUpdateAssignment]);
 
-  const handleConfirmUnassign = () => {
+  const handleConfirmUnassign = useCallback(() => {
     onUpdateAssignment(item.id, []);
     setIsUnassignConfirmOpen(false);
-  };
+  }, [item.id, onUpdateAssignment]);
   
   return (
     <>
@@ -130,6 +130,7 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
             onConfirm={handleConfirmUnassign}
             title="Unassign Item"
             message={`Are you sure you want to unassign "${item.name}" from everyone?`}
+            variant="destructive"
         />
     </>
   );
@@ -140,13 +141,15 @@ interface ReceiptDisplayProps {
   receipt: ParsedReceipt;
   assignments: Assignments;
   people: string[];
+  isUndoable: boolean;
   onUpdateAssignment: (itemId: string, newNames: string[]) => void;
   onAssignAllUnassigned: (personName: string) => void;
   onSplitAllEqually: () => void;
+  onUndoLastAssignment: () => void;
   isInteractive: boolean;
 }
 
-const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, people, onUpdateAssignment, onAssignAllUnassigned, onSplitAllEqually, isInteractive }) => {
+const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, people, isUndoable, onUpdateAssignment, onAssignAllUnassigned, onSplitAllEqually, onUndoLastAssignment, isInteractive }) => {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [isAssignAllModalOpen, setIsAssignAllModalOpen] = useState(false);
   const [isSplitAllModalOpen, setIsSplitAllModalOpen] = useState(false);
@@ -157,24 +160,31 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
   
-  const handleUpdateAssignment = (itemId: string, newNames: string[]) => {
+  const handleUpdateAssignment = useCallback((itemId: string, newNames: string[]) => {
     onUpdateAssignment(itemId, newNames);
     setEditingItemId(null);
-  };
+  }, [onUpdateAssignment]);
   
-  const handleConfirmAssignAll = () => {
+  const handleConfirmAssignAll = useCallback(() => {
     if (selectedPersonForAssignAll) {
       onAssignAllUnassigned(selectedPersonForAssignAll);
       setIsAssignAllModalOpen(false);
     }
-  };
+  }, [selectedPersonForAssignAll, onAssignAllUnassigned]);
 
-  const handleConfirmSplitAll = () => {
+  const handleConfirmSplitAll = useCallback(() => {
     onSplitAllEqually();
     setIsSplitAllModalOpen(false);
-  };
+  }, [onSplitAllEqually]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingItemId(null);
+  }, []);
   
-  const hasUnassignedItems = receipt.items.some(item => !assignments[item.id] || assignments[item.id].length === 0);
+  const hasUnassignedItems = useMemo(() => 
+    receipt.items.some(item => !assignments[item.id] || assignments[item.id].length === 0),
+    [receipt.items, assignments]
+  );
 
   const filteredItems = useMemo(() =>
     receipt.items.filter(item =>
@@ -188,6 +198,17 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
             <div className="flex justify-between items-start gap-2">
               <h2 className="text-2xl font-bold text-text-primary dark:text-text-primary-dark">Receipt Details</h2>
               <div className="flex items-center gap-2 flex-wrap justify-end flex-shrink-0">
+                  {isInteractive && (
+                      <button 
+                          onClick={onUndoLastAssignment}
+                          disabled={!isUndoable}
+                          className="px-2 py-1 text-xs font-semibold text-primary dark:text-primary-dark bg-primary/10 dark:bg-primary-dark/10 hover:bg-primary/20 dark:hover:bg-primary-dark/20 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                          aria-label="Undo last assignment"
+                      >
+                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M12.78 4.22a.75.75 0 0 1 0 1.06L8.81 9.25l3.97 3.97a.75.75 0 1 1-1.06 1.06L7.75 10.31l-3.97 3.97a.75.75 0 0 1-1.06-1.06L6.69 9.25l-3.97-3.97a.75.75 0 0 1 1.06-1.06l3.97 3.97 3.97-3.97a.75.75 0 0 1 1.06 0Z" clipRule="evenodd" /></svg>
+                          Undo
+                      </button>
+                  )}
                   {isInteractive && people.length > 0 && (
                       <button 
                           onClick={() => setIsSplitAllModalOpen(true)}
@@ -238,7 +259,7 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
                 editingItemId={editingItemId}
                 onEditClick={setEditingItemId}
                 onUpdateAssignment={handleUpdateAssignment}
-                onCancelEdit={() => setEditingItemId(null)}
+                onCancelEdit={handleCancelEdit}
               />
             ))}
             {filteredItems.length === 0 && (
@@ -315,8 +336,9 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
             isOpen={isSplitAllModalOpen}
             onClose={() => setIsSplitAllModalOpen(false)}
             onConfirm={handleConfirmSplitAll}
-            title="Split All Items Equally?"
+            title="Split All Items Equally"
             message={`Are you sure you want to assign every item on this receipt to all ${people.length} people? This will overwrite all current assignments.`}
+            variant="primary"
         />
     </>
   );
