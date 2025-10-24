@@ -72,4 +72,6 @@ export type AppAction =
   | { type: 'DIRECT_ASSIGNMENT'; payload: { sessionId: string; itemId: string; newNames: string[] } }
   | { type: 'EDIT_PERSON_NAME'; payload: { sessionId: string; oldName: string; newName: string } }
   | { type: 'ASSIGN_ALL_UNASSIGNED'; payload: { sessionId: string; personName: string } }
+  | { type: 'SPLIT_ALL_EQUALLY'; payload: { sessionId: string } }
+  | { type: 'CLEAR_CHAT_HISTORY'; payload: { sessionId: string } }
   | { type: 'RESET_APP' };

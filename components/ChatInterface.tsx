@@ -1,7 +1,8 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-// Fix: Import ReceiptSession to resolve reference error in component props.
 import { ChatMessage, BillSummary, AppStatus, ParsedReceipt, ReceiptSession } from '../types';
 import { exportBillSummary, shareBillSummary } from '../utils/billExporter';
+import ConfirmationModal from './ConfirmationModal';
 
 interface BillSummaryProps {
   summary: BillSummary;
@@ -13,7 +14,7 @@ interface BillSummaryProps {
   totalItemsCount: number;
 }
 
-const BillSummaryDisplay: React.FC<BillSummaryProps> = ({ summary, receipt, receiptName, isInteractive, onEditPersonName, assignedItemsCount, totalItemsCount }) => {
+const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, receipt, receiptName, isInteractive, onEditPersonName, assignedItemsCount, totalItemsCount }) => {
     const [editingName, setEditingName] = useState<string | null>(null);
     const [expandedName, setExpandedName] = useState<string | null>(null);
     const [newNameInput, setNewNameInput] = useState('');
@@ -130,8 +131,7 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = ({ summary, receipt, rece
                                 <div className="flex items-center gap-2">
                                     <button onClick={handleSave} aria-label="Save name" className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                                          <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.052-.143Z" clipRule="evenodd" />
-                                        </svg>
+                                          <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.052-.143Z" clipRule="evenodd" /></svg>
                                     </button>
                                     <button onClick={handleCancel} aria-label="Cancel editing" className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
@@ -207,7 +207,7 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = ({ summary, receipt, rece
             ))}
         </div>
     );
-};
+});
 
 
 interface ChatInterfaceProps {
@@ -217,10 +217,12 @@ interface ChatInterfaceProps {
   onSendMessage: (message: string) => void;
   onSetPeople: (names: string) => void;
   onEditPersonName: (oldName: string, newName: string) => void;
+  onClearChat: () => void;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, activeSession, onSendMessage, onSetPeople, onEditPersonName }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, activeSession, onSendMessage, onSetPeople, onEditPersonName, onClearChat }) => {
   const [input, setInput] = useState('');
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -269,6 +271,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
     setInput('');
   };
 
+  const handleConfirmClearChat = () => {
+    onClearChat();
+    setIsClearConfirmOpen(false);
+  };
+
   const getPlaceholderText = () => {
     if (!activeSession) return "Loading...";
     switch (activeSession.status) {
@@ -293,82 +300,106 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
 
 
   return (
-    <div className="bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark h-full flex flex-col p-4">
-      <h2 className="text-2xl font-bold text-text-primary dark:text-text-primary-dark mb-4 pb-4 border-b border-border dark:border-border-dark">Smart Chat & Summary</h2>
-      
-      <div className="flex-grow overflow-y-auto mb-4 pr-2 space-y-4">
-        {messages.map((msg, index) => {
-           if (msg.sender === 'system') {
-                return (
-                    <div key={index} className="text-center">
-                        <span className="text-xs text-text-secondary dark:text-text-secondary-dark bg-background dark:bg-background-dark px-2 py-1 rounded-full">{msg.text}</span>
+    <>
+        <div className="bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark h-full flex flex-col p-4">
+          <div className="flex justify-between items-center gap-2 mb-4 pb-4 border-b border-border dark:border-border-dark">
+              <h2 className="text-2xl font-bold text-text-primary dark:text-text-primary-dark">Smart Chat & Summary</h2>
+              {messages.length > 0 && (
+                <button 
+                    onClick={() => setIsClearConfirmOpen(true)} 
+                    className="p-2 rounded-full text-text-secondary dark:text-text-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600" 
+                    aria-label="Clear chat history"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                      <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75V4.5h8V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 6a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 6ZM5.25 5.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75H14.75a.75.75 0 0 0 .75-.75V6a.75.75 0 0 0-.75-.75H5.25Z" clipRule="evenodd" />
+                      <path d="M5.057 7.443a.75.75 0 0 0-1.06 1.06l1.75 1.75a.75.75 0 1 0 1.06-1.06l-1.75-1.75Zm9.943 0a.75.75 0 1 0-1.06 1.06l1.75 1.75a.75.75 0 1 0 1.06-1.06l-1.75-1.75Z" />
+                      <path fillRule="evenodd" d="M3.5 10a.75.75 0 0 1 .75-.75h11.5a.75.75 0 0 1 0 1.5H4.25A.75.75 0 0 1 3.5 10Z" clipRule="evenodd" />
+                    </svg>
+                </button>
+              )}
+          </div>
+          
+          <div className="flex-grow overflow-y-auto mb-4 pr-2 space-y-4">
+            {messages.map((msg, index) => {
+               if (msg.sender === 'system') {
+                    return (
+                        <div key={index} className="text-center">
+                            <span className="text-xs text-text-secondary dark:text-text-secondary-dark bg-background dark:bg-background-dark px-2 py-1 rounded-full">{msg.text}</span>
+                        </div>
+                    )
+               }
+               return (
+                <div key={index} className={`flex items-end gap-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {msg.sender !== 'user' && (
+                    <div className="w-8 h-8 rounded-full bg-primary dark:bg-primary-dark flex items-center justify-center text-on-primary dark:text-on-primary-dark text-sm font-bold flex-shrink-0">AI</div>
+                    )}
+                    <div className={`max-w-xs md:max-w-md lg:max-w-lg px-4 py-2 rounded-lg shadow-sm ${
+                        msg.sender === 'user' ? 'bg-primary dark:bg-primary-dark text-on-primary dark:text-on-primary-dark' : 'bg-background dark:bg-background-dark text-text-primary dark:text-text-primary-dark'
+                    }`}>
+                    <p className="text-sm break-words whitespace-pre-wrap">{msg.text}</p>
                     </div>
-                )
-           }
-           return (
-            <div key={index} className={`flex items-end gap-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {msg.sender !== 'user' && (
-                <div className="w-8 h-8 rounded-full bg-primary dark:bg-primary-dark flex items-center justify-center text-on-primary dark:text-on-primary-dark text-sm font-bold flex-shrink-0">AI</div>
-                )}
-                <div className={`max-w-xs md:max-w-md lg:max-w-lg px-4 py-2 rounded-lg shadow-sm ${
-                    msg.sender === 'user' ? 'bg-primary dark:bg-primary-dark text-on-primary dark:text-on-primary-dark' : 'bg-background dark:bg-background-dark text-text-primary dark:text-text-primary-dark'
-                }`}>
-                <p className="text-sm break-words whitespace-pre-wrap">{msg.text}</p>
                 </div>
-            </div>
-           );
-        })}
-         {activeSession?.status === 'assigning' && (
-             <div className="flex items-end gap-2 justify-start">
-                 <div className="w-8 h-8 rounded-full bg-primary dark:bg-primary-dark flex items-center justify-center text-white dark:text-black text-sm font-bold flex-shrink-0">AI</div>
-                 <div className="px-4 py-2 rounded-lg bg-background dark:bg-background-dark text-text-primary dark:text-text-primary-dark shadow-sm">
-                    <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-primary dark:bg-primary-dark rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                        <div className="w-2 h-2 bg-primary dark:bg-primary-dark rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                        <div className="w-2 h-2 bg-primary dark:bg-primary-dark rounded-full animate-bounce"></div>
-                    </div>
+               );
+            })}
+             {activeSession?.status === 'assigning' && (
+                 <div className="flex items-end gap-2 justify-start">
+                     <div className="w-8 h-8 rounded-full bg-primary dark:bg-primary-dark flex items-center justify-center text-white dark:text-black text-sm font-bold flex-shrink-0">AI</div>
+                     <div className="px-4 py-2 rounded-lg bg-background dark:bg-background-dark text-text-primary dark:text-text-primary-dark shadow-sm">
+                        <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-primary dark:bg-primary-dark rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                            <div className="w-2 h-2 bg-primary dark:bg-primary-dark rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                            <div className="w-2 h-2 bg-primary dark:bg-primary-dark rounded-full animate-bounce"></div>
+                        </div>
+                     </div>
                  </div>
-             </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
 
-      <div className="mb-4">
-        <BillSummaryDisplay 
-            summary={summary} 
-            receipt={activeSession?.parsedReceipt ?? null}
-            receiptName={activeSession?.name ?? 'receipt'}
-            isInteractive={isNameEditingEnabled} 
-            onEditPersonName={onEditPersonName}
-            assignedItemsCount={assignedItemsCount}
-            totalItemsCount={totalItemsCount}
-        />
-      </div>
+          <div className="mb-4">
+            <BillSummaryDisplay 
+                summary={summary} 
+                receipt={activeSession?.parsedReceipt ?? null}
+                receiptName={activeSession?.name ?? 'receipt'}
+                isInteractive={isNameEditingEnabled} 
+                onEditPersonName={onEditPersonName}
+                assignedItemsCount={assignedItemsCount}
+                totalItemsCount={totalItemsCount}
+            />
+          </div>
 
-      <form onSubmit={handleSubmit} className="mt-auto flex gap-2">
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={getPlaceholderText()}
-          disabled={isInputDisabled}
-          className="flex-grow p-3 border border-border dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary dark:focus:ring-primary-dark focus:outline-none transition-shadow disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed bg-white dark:bg-gray-900 text-text-primary dark:text-text-primary-dark resize-none"
-          aria-label="Chat input"
+          <form onSubmit={handleSubmit} className="mt-auto flex gap-2">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={getPlaceholderText()}
+              disabled={isInputDisabled}
+              className="flex-grow p-3 border border-border dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary dark:focus:ring-primary-dark focus:outline-none transition-shadow disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed bg-white dark:bg-gray-900 text-text-primary dark:text-text-primary-dark resize-none"
+              aria-label="Chat input"
+            />
+            <button
+              type="submit"
+              disabled={isInputDisabled || !input.trim()}
+              className="bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-3 px-5 rounded-lg transition-colors disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center self-end"
+              aria-label="Send message"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                <path d="M3.105 3.105a.75.75 0 0 1 .814-.156l14.682 6.206a.75.75 0 0 1 0 1.302L3.919 17.051a.75.75 0 0 1-.814-.156l-.619-.62a.75.75 0 0 1 .157-.814L6.9 12 2.64 8.535a.75.75 0 0 1-.157-.814l.62-.619Z" />
+              </svg>
+            </button>
+          </form>
+        </div>
+        <ConfirmationModal
+            isOpen={isClearConfirmOpen}
+            onClose={() => setIsClearConfirmOpen(false)}
+            onConfirm={handleConfirmClearChat}
+            title="Clear Chat History?"
+            message="Are you sure you want to clear the chat history for this receipt? This action cannot be undone, but item assignments will not be affected."
         />
-        <button
-          type="submit"
-          disabled={isInputDisabled || !input.trim()}
-          className="bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-3 px-5 rounded-lg transition-colors disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center self-end"
-          aria-label="Send message"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-            <path d="M3.105 3.105a.75.75 0 0 1 .814-.156l14.682 6.206a.75.75 0 0 1 0 1.302L3.919 17.051a.75.75 0 0 1-.814-.156l-.619-.62a.75.75 0 0 1 .157-.814L6.9 12 2.64 8.535a.75.75 0 0 1-.157-.814l.62-.619Z" />
-          </svg>
-        </button>
-      </form>
-    </div>
+    </>
   );
 };
 

@@ -1,3 +1,4 @@
+
 import React, { useReducer, useMemo, useState, useEffect } from 'react';
 import SessionSidebar from './components/SessionSidebar';
 import ReceiptDisplay from './components/ReceiptDisplay';
@@ -173,6 +174,23 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     const message = `Assigned ${itemsAssignedCount} remaining item(s) to ${personName}.`;
                     return { ...session, assignments: newAssignments, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
                   }
+                  
+                  case 'SPLIT_ALL_EQUALLY': {
+                    if (!session.parsedReceipt || session.people.length === 0) return session;
+
+                    const newAssignments: Assignments = {};
+                    for (const item of session.parsedReceipt.items) {
+                        newAssignments[item.id] = [...session.people];
+                    }
+
+                    const message = `All items have been split equally among ${session.people.length} people.`;
+                    return { ...session, assignments: newAssignments, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+                  }
+                  
+                  case 'CLEAR_CHAT_HISTORY': {
+                      return { ...session, chatHistory: [{ sender: 'system', text: 'Chat history cleared.'}] };
+                  }
+
                   default:
                     return session;
                 }
@@ -187,7 +205,15 @@ const App: React.FC = () => {
   const { sessions, activeSessionId } = state;
   const activeSession = sessions.find(s => s.id === activeSessionId) || null;
   
-  const [theme, setTheme] = useState<'light' | 'dark'>(localStorage.getItem('theme') as 'light' | 'dark' || 'light');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('theme')) {
+        return localStorage.getItem('theme') as 'light' | 'dark';
+    }
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return 'dark';
+    }
+    return 'light';
+  });
   const [isSidebarVisible, setSidebarVisible] = useState(false);
 
   useEffect(() => {
@@ -196,20 +222,6 @@ const App: React.FC = () => {
     root.classList.toggle('dark', isDark);
     localStorage.setItem('theme', theme);
   }, [theme]);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    if (!localStorage.getItem('theme')) {
-        setTheme(mediaQuery.matches ? 'dark' : 'light');
-    }
-    const handler = (e: MediaQueryListEvent) => {
-        if (!localStorage.getItem('theme')) {
-            setTheme(e.matches ? 'dark' : 'light');
-        }
-    };
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
-  }, []);
   
   const currentBillSummary = useMemo(() => 
     calculateBillSummary(
@@ -310,6 +322,16 @@ const App: React.FC = () => {
     if (!activeSession) return;
     dispatch({ type: 'ASSIGN_ALL_UNASSIGNED', payload: { sessionId: activeSession.id, personName } });
   };
+  
+  const handleSplitAllEqually = () => {
+    if (!activeSession) return;
+    dispatch({ type: 'SPLIT_ALL_EQUALLY', payload: { sessionId: activeSession.id } });
+  };
+
+  const handleClearChat = () => {
+    if (!activeSession) return;
+    dispatch({ type: 'CLEAR_CHAT_HISTORY', payload: { sessionId: activeSession.id } });
+  };
 
   return (
     <div className="h-screen bg-background dark:bg-background-dark font-sans flex flex-col">
@@ -318,17 +340,17 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4">
             <button
                 onClick={() => setSidebarVisible(!isSidebarVisible)}
-                className="lg:hidden p-2 rounded-md text-on-primary dark:text-on-primary-dark hover:bg-white/10 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+                className="lg:hidden p-2 rounded-md text-on-primary dark:text-text-primary-dark hover:bg-white/10 dark:hover:bg-primary-dark/10 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
                 aria-label="Toggle sidebar"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-6 h-6">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                 </svg>
             </button>
-            <h1 className="text-2xl font-bold text-on-primary dark:text-on-primary-dark">AI Bill Splitter</h1>
+            <h1 className="text-2xl font-bold text-on-primary dark:text-text-primary-dark">AI Bill Splitter</h1>
           </div>
-          <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-full text-on-primary dark:text-on-primary-dark hover:bg-white/10 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-primary-dark focus:ring-white" aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
-              {theme === 'light' ? (
+          <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-full text-on-primary dark:text-text-primary-dark hover:bg-white/10 dark:hover:bg-primary-dark/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-primary-dark focus:ring-white" aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+              {theme === 'dark' ? (
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M7.455 2.668a.75.75 0 0 1 .183.673l-.313 3.444a.75.75 0 0 0 1.41.122l.313-3.444a.75.75 0 0 1 1.292-.592l2.431 2.431a.75.75 0 0 0 1.06-.021l2.528-2.7a.75.75 0 0 1 1.104.994l-2.528 2.7a.75.75 0 0 0 .021 1.06l2.432 2.432a.75.75 0 0 1-.592 1.292l-3.444.313a.75.75 0 0 0-.122 1.41l3.444.313a.75.75 0 0 1 .673.183l2.7-2.528a.75.75 0 0 1 .994 1.104l-2.7 2.528a.75.75 0 0 0 .021 1.06l2.432 2.432a.75.75 0 0 1-1.292.592l-2.431-2.431a.75.75 0 0 0-1.06.021l-2.7 2.528a.75.75 0 0 1-1.104-.994l2.7-2.528a.75.75 0 0 0-.021-1.06l-2.432-2.432a.75.75 0 0 1 .592-1.292l3.444-.313a.75.75 0 0 0 .122-1.41l-3.444-.313a.75.75 0 0 1-.673-.183l-2.528 2.7a.75.75 0 0 1-.994-1.104l2.528-2.7a.75.75 0 0 0-.021-1.06L3.43 4.431a.75.75 0 0 1 1.292-.592l2.431 2.431a.75.75 0 0 0 1.06.021l2.7-2.528a.75.75 0 0 1 1.104.994l-2.7 2.528a.75.75 0 0 0 .021 1.06L15.57 9.57a.75.75 0 0 1-.592 1.292l-3.444-.313a.75.75 0 0 0-.122 1.41l3.444-.313a.75.75 0 0 1 .183.673l-2.528 2.7a.75.75 0 0 1-1.104-.994l2.528-2.7a.75.75 0 0 0-.021-1.06L9.569 7.431a.75.75 0 0 1-.592-1.292l2.431-2.431a.75.75 0 0 0 .021-1.06l-2.7-2.528a.75.75 0 0 1 .673-.183Z" clipRule="evenodd" /></svg>
               ) : (
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10 2a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 2ZM10 15a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 15ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM15.657 4.343a.75.75 0 0 1 0 1.06l-1.06 1.06a.75.75 0 0 1-1.06-1.06l1.06-1.06a.75.75 0 0 1 1.06 0ZM6.464 13.536a.75.75 0 0 1 0 1.06l-1.06 1.06a.75.75 0 0 1-1.06-1.06l1.06-1.06a.75.75 0 0 1 1.06 0ZM18 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 18 10ZM4.25 10.75a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM13.536 6.464a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 0 1-1.06 1.06l-1.06-1.06a.75.75 0 0 1 0-1.06ZM4.343 15.657a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 1 1-1.06 1.06l-1.06-1.06a.75.75 0 0 1 0-1.06Z" /></svg>
@@ -373,6 +395,7 @@ const App: React.FC = () => {
                             people={activeSession.people}
                             onUpdateAssignment={handleDirectAssignment}
                             onAssignAllUnassigned={handleAssignAllUnassigned}
+                            onSplitAllEqually={handleSplitAllEqually}
                             isInteractive={activeSession.status === 'ready'}
                         />
                     )}
@@ -385,6 +408,7 @@ const App: React.FC = () => {
                         onSendMessage={handleSendMessage}
                         onSetPeople={handleSetPeople}
                         onEditPersonName={handleEditPersonName}
+                        onClearChat={handleClearChat}
                     />
                 </div>
               </div>
