@@ -2,11 +2,16 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ParsedReceipt, ReceiptItem, Assignments, AssignmentUpdate } from '../types';
 
-const API_KEY = process.env.API_KEY;
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
+// Helper function to initialize the AI client on demand.
+// This ensures the latest API key from the environment is used for each request,
+// improving stability and resolving potential key validation errors.
+function getAiClient() {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      throw new Error("API_KEY environment variable is not set. Please ensure it is configured correctly.");
+    }
+    return new GoogleGenAI({ apiKey });
 }
-const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 const receiptSchema = {
   type: Type.OBJECT,
@@ -54,6 +59,7 @@ const receiptSchema = {
 };
 
 export async function parseReceipt(imageBase64: string, mimeType: string): Promise<ParsedReceipt> {
+  const ai = getAiClient();
   const imagePart = {
     inlineData: {
       data: imageBase64,
@@ -137,6 +143,7 @@ export async function updateAssignments(
   items: ReceiptItem[],
   currentAssignments: Assignments
 ): Promise<AssignmentUpdate> {
+    const ai = getAiClient();
     // 1. Caching: Create a unique key for the current state and input.
     const cacheKey = JSON.stringify({ userInput, items: items.map(i => i.id), currentAssignments });
     if (assignmentCache.has(cacheKey)) {
