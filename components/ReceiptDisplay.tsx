@@ -3,6 +3,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { ParsedReceipt, Assignments, ReceiptItem } from '../types';
 import ConfirmationModal from './ConfirmationModal';
 import ImageZoomModal from './ImageZoomModal';
+import EditableField from './EditableField';
 
 interface ReceiptItemViewProps {
   item: ReceiptItem;
@@ -14,6 +15,7 @@ interface ReceiptItemViewProps {
   onUpdateAssignment: (itemId: string, newNames: string[]) => void;
   onCancelEdit: () => void;
   onZoomRequest: () => void;
+  onEditItem: (itemId: string, newName: string, newPrice: number) => void;
 }
 
 const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
@@ -25,7 +27,8 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
   onEditClick,
   onUpdateAssignment,
   onCancelEdit,
-  onZoomRequest
+  onZoomRequest,
+  onEditItem
 }) => {
   const [selectedNames, setSelectedNames] = useState<string[]>([]);
   const [isUnassignConfirmOpen, setIsUnassignConfirmOpen] = useState(false);
@@ -64,21 +67,35 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
     <>
         <div className={`p-3 rounded-md border border-border dark:border-border-dark transition-colors ${isEditing ? 'bg-primary/5 dark:bg-primary-dark/10 ring-2 ring-primary dark:ring-primary-dark' : 'bg-background dark:bg-background-dark'}`}>
           <div 
-            className="flex justify-between items-start gap-2 cursor-pointer"
-            onClick={onZoomRequest}
+            className="flex justify-between items-start gap-2"
             role="button"
             tabIndex={0}
             onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onZoomRequest()}
             aria-label={`Zoom in on ${item.name}`}
           >
-            <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-1 min-w-0" onClick={onZoomRequest}>
                 <div 
                     className={`w-2 h-2 rounded-full flex-shrink-0 ${isAssigned ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-500'}`}
                     title={isAssigned ? 'Assigned' : 'Unassigned'}
                 ></div>
-                <span className="font-semibold text-text-primary dark:text-text-primary-dark truncate">{item.name} {item.quantity > 1 ? `(x${item.quantity})` : ''}</span>
+                <EditableField
+                  initialValue={item.name}
+                  onSave={(newName) => onEditItem(item.id, newName, item.price)}
+                  isInteractive={isInteractive}
+                  className="font-semibold text-text-primary dark:text-text-primary-dark"
+                  ariaLabel={`Edit item name for ${item.name}`}
+                />
+                {item.quantity > 1 && <span className="text-text-secondary dark:text-text-secondary-dark text-sm ml-1">(x{item.quantity})</span>}
             </div>
-            <span className="font-mono text-text-primary dark:text-text-primary-dark flex-shrink-0">{formatCurrency(item.price)}</span>
+             <EditableField
+              initialValue={item.price}
+              onSave={(newPrice) => onEditItem(item.id, item.name, parseFloat(newPrice))}
+              isInteractive={isInteractive}
+              type="number"
+              formatter={formatCurrency}
+              className="font-mono text-text-primary dark:text-text-primary-dark flex-shrink-0"
+              ariaLabel={`Edit price for ${item.name}`}
+            />
           </div>
 
           {isEditing ? (
@@ -172,9 +189,11 @@ interface ReceiptDisplayProps {
   onSplitAllEqually: () => void;
   onUndoLastAssignment: () => void;
   isInteractive: boolean;
+  onEditItem: (itemId: string, newName: string, newPrice: number) => void;
+  onEditTotals: (newSubtotal: number, newTax: number, newTip: number) => void;
 }
 
-const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, people, receiptImage, isUndoable, onUpdateAssignment, onAssignAllUnassigned, onSplitAllEqually, onUndoLastAssignment, isInteractive }) => {
+const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, people, receiptImage, isUndoable, onUpdateAssignment, onAssignAllUnassigned, onSplitAllEqually, onUndoLastAssignment, isInteractive, onEditItem, onEditTotals }) => {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [isAssignAllModalOpen, setIsAssignAllModalOpen] = useState(false);
   const [isSplitAllModalOpen, setIsSplitAllModalOpen] = useState(false);
@@ -305,6 +324,7 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
                             onUpdateAssignment={handleUpdateAssignment}
                             onCancelEdit={handleCancelEdit}
                             onZoomRequest={() => setZoomModalOpen(true)}
+                            onEditItem={onEditItem}
                           />
                         ))}
                         {filteredItems.length === 0 && (
@@ -319,15 +339,39 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-text-secondary dark:text-text-secondary-dark">Subtotal</span>
-                <span className="font-mono">{formatCurrency(receipt.subtotal)}</span>
+                 <EditableField
+                    initialValue={receipt.subtotal}
+                    onSave={(val) => onEditTotals(parseFloat(val), receipt.tax, receipt.tip)}
+                    isInteractive={isInteractive}
+                    type="number"
+                    formatter={formatCurrency}
+                    className="font-mono"
+                    ariaLabel="Edit subtotal"
+                 />
               </div>
               <div className="flex justify-between">
                 <span className="text-text-secondary dark:text-text-secondary-dark">Tax</span>
-                <span className="font-mono">{formatCurrency(receipt.tax)}</span>
+                <EditableField
+                    initialValue={receipt.tax}
+                    onSave={(val) => onEditTotals(receipt.subtotal, parseFloat(val), receipt.tip)}
+                    isInteractive={isInteractive}
+                    type="number"
+                    formatter={formatCurrency}
+                    className="font-mono"
+                    ariaLabel="Edit tax"
+                 />
               </div>
               <div className="flex justify-between">
                 <span className="text-text-secondary dark:text-text-secondary-dark">Tip</span>
-                <span className="font-mono">{formatCurrency(receipt.tip)}</span>
+                <EditableField
+                    initialValue={receipt.tip}
+                    onSave={(val) => onEditTotals(receipt.subtotal, receipt.tax, parseFloat(val))}
+                    isInteractive={isInteractive}
+                    type="number"
+                    formatter={formatCurrency}
+                    className="font-mono"
+                    ariaLabel="Edit tip"
+                 />
               </div>
               <div className="flex justify-between font-bold text-base pt-2 border-t border-border dark:border-border-dark mt-2">
                 <span className="text-text-primary dark:text-text-primary-dark">Total</span>

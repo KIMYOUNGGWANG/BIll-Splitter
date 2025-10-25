@@ -13,9 +13,10 @@ interface BillSummaryProps {
   onEditPersonName: (oldName: string, newName: string) => void;
   assignedItemsCount: number;
   totalItemsCount: number;
+  isInsideBubble: boolean;
 }
 
-const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, receipt, receiptName, isInteractive, onEditPersonName, assignedItemsCount, totalItemsCount }) => {
+const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, receipt, receiptName, isInteractive, onEditPersonName, assignedItemsCount, totalItemsCount, isInsideBubble }) => {
     const [editingName, setEditingName] = useState<string | null>(null);
     const [expandedName, setExpandedName] = useState<string | null>(null);
     const [newNameInput, setNewNameInput] = useState('');
@@ -77,37 +78,39 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, re
         );
     }
 
+    const containerClasses = isInsideBubble 
+        ? "p-4 space-y-3"
+        : "p-4 rounded-lg bg-background dark:bg-background-dark border border-border dark:border-border-dark space-y-3";
+
     return (
-        <div className="p-4 rounded-lg bg-background dark:bg-background-dark border border-border dark:border-border-dark space-y-3">
-            <div className="flex justify-between items-center gap-2">
-                 <h3 className="text-lg font-bold text-text-primary dark:text-text-primary-dark">Who Owes What</h3>
-                 {summary.length > 0 && (
-                    <div className="flex items-center gap-2">
-                        <button onClick={handleShare} className="p-2 rounded-full text-text-secondary dark:text-text-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600" aria-label={navigator.share ? 'Share summary' : 'Copy summary'}>
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M13 4.5a2.5 2.5 0 1 1 .702 4.864l-3.5 3.5a2.5 2.5 0 1 1-3.536-3.536l2.05-2.05a.75.75 0 0 1 1.06 1.06l-2.05 2.05a1 1 0 1 0 1.414 1.414l3.5-3.5a1 1 0 0 0-1.414-1.414L10.91 8.586A2.5 2.5 0 0 1 13 4.5ZM7 15.5a2.5 2.5 0 1 1-.702-4.864l3.5-3.5a2.5 2.5 0 1 1 3.536 3.536l-2.05 2.05a.75.75 0 0 1-1.06-1.06l2.05-2.05a1 1 0 1 0-1.414-1.414l-3.5 3.5a1 1 0 0 0 1.414 1.414L9.09 11.414A2.5 2.5 0 0 1 7 15.5Z" /></svg>
-                        </button>
-                         <button onClick={() => exportBillSummary(summary, receipt, receiptName)} className="p-2 rounded-full text-text-secondary dark:text-text-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600" aria-label="Export summary">
-                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" /><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" /></svg>
-                        </button>
-                    </div>
-                 )}
-            </div>
+        <div className={containerClasses}>
+             {!isInsideBubble && (
+                 <div className="flex justify-between items-center gap-2">
+                     <h3 className="text-lg font-bold text-text-primary dark:text-text-primary-dark">Who Owes What</h3>
+                 </div>
+             )}
             
-            <div className="space-y-1">
-                 <div className="flex justify-between items-center text-xs text-text-secondary dark:text-text-secondary-dark">
-                    <span>Assignment Progress</span>
-                    <span className="font-medium">{assignedItemsCount} / {totalItemsCount} items</span>
-                </div>
-                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+            <div className="flex items-center gap-2">
+                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 flex-grow">
                     <div className={`h-2 rounded-full transition-all ${isComplete ? 'bg-green-500' : 'bg-primary dark:bg-primary-dark'}`} style={{ width: `${progressPercentage}%` }}></div>
                 </div>
-                {isComplete && (
-                    <div className="text-green-600 dark:text-green-400 text-xs font-semibold flex items-center justify-center gap-1 pt-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm3.84-9.44a.75.75 0 0 0-1.18-.94l-2.65 3.18-1.47-1.47a.75.75 0 1 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l3.25-3.88Z" clipRule="evenodd" /></svg>
-                        <span>Complete!</span>
-                    </div>
-                )}
+                 <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-xs font-medium text-text-secondary dark:text-text-secondary-dark">{assignedItemsCount}/{totalItemsCount}</span>
+                    <button onClick={handleShare} className="p-1 rounded-full text-text-secondary dark:text-text-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600" aria-label={navigator.share ? 'Share summary' : 'Copy summary'}>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M13 4.5a2.5 2.5 0 1 1 .702 4.864l-3.5 3.5a2.5 2.5 0 1 1-3.536-3.536l2.05-2.05a.75.75 0 0 1 1.06 1.06l-2.05 2.05a1 1 0 1 0 1.414 1.414l3.5-3.5a1 1 0 0 0-1.414-1.414L10.91 8.586A2.5 2.5 0 0 1 13 4.5ZM7 15.5a2.5 2.5 0 1 1-.702-4.864l3.5-3.5a2.5 2.5 0 1 1 3.536 3.536l-2.05 2.05a.75.75 0 0 1-1.06-1.06l2.05-2.05a1 1 0 1 0-1.414-1.414l-3.5 3.5a1 1 0 0 0 1.414 1.414L9.09 11.414A2.5 2.5 0 0 1 7 15.5Z" /></svg>
+                    </button>
+                     <button onClick={() => exportBillSummary(summary, receipt, receiptName)} className="p-1 rounded-full text-text-secondary dark:text-text-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600" aria-label="Export summary">
+                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" /><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" /></svg>
+                    </button>
+                </div>
             </div>
+            
+            {isComplete && (
+                <div className="text-green-600 dark:text-green-400 text-xs font-semibold flex items-center justify-center gap-1 -mt-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm3.84-9.44a.75.75 0 0 0-1.18-.94l-2.65 3.18-1.47-1.47a.75.75 0 1 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l3.25-3.88Z" clipRule="evenodd" /></svg>
+                    <span>All items assigned!</span>
+                </div>
+            )}
             
             {summary.map(person => (
                 <div key={person.name} className="p-3 bg-surface dark:bg-surface-dark rounded-md shadow-sm">
@@ -233,7 +236,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
     }
   }, [input]);
 
-  useEffect(scrollToBottom, [messages, scrollToBottom]);
+  useEffect(scrollToBottom, [messages, summary, scrollToBottom]);
   
   useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
@@ -352,17 +355,39 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="mb-4">
-            <BillSummaryDisplay 
-                summary={summary} 
-                receipt={activeSession?.parsedReceipt ?? null}
-                receiptName={activeSession?.name ?? 'receipt'}
-                isInteractive={isNameEditingEnabled} 
-                onEditPersonName={onEditPersonName}
-                assignedItemsCount={assignedItemsCount}
-                totalItemsCount={totalItemsCount}
-            />
-          </div>
+          {activeSession && (
+             <div className="mb-4">
+                {summary.length > 0 ? (
+                    <div className="flex items-end gap-2 justify-start">
+                        <div className="w-8 h-8 rounded-full bg-primary dark:bg-primary-dark flex items-center justify-center text-on-primary dark:text-on-primary-dark text-sm font-bold flex-shrink-0 self-start">AI</div>
+                        <div className="w-full max-w-full rounded-lg shadow-sm bg-background dark:bg-background-dark text-text-primary dark:text-text-primary-dark">
+                            <BillSummaryDisplay 
+                                summary={summary} 
+                                receipt={activeSession.parsedReceipt}
+                                receiptName={activeSession.name}
+                                isInteractive={isNameEditingEnabled} 
+                                onEditPersonName={onEditPersonName}
+                                assignedItemsCount={assignedItemsCount}
+                                totalItemsCount={totalItemsCount}
+                                isInsideBubble={true}
+                            />
+                        </div>
+                    </div>
+                ) : (
+                    <BillSummaryDisplay 
+                        summary={summary} 
+                        receipt={activeSession.parsedReceipt}
+                        receiptName={activeSession.name}
+                        isInteractive={isNameEditingEnabled} 
+                        onEditPersonName={onEditPersonName}
+                        assignedItemsCount={assignedItemsCount}
+                        totalItemsCount={totalItemsCount}
+                        isInsideBubble={false}
+                    />
+                )}
+            </div>
+          )}
+
 
           <form onSubmit={handleSubmit} className="mt-auto flex gap-2">
             <textarea

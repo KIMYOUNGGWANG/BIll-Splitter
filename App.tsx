@@ -171,6 +171,38 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     }
                     return { ...session, people: updatedPeople, assignments: updatedAssignments };
                   }
+                  
+                  case 'EDIT_ITEM': {
+                      if (!session.parsedReceipt) return session;
+                      const { itemId, newName, newPrice } = action.payload;
+                      const newItems = session.parsedReceipt.items.map(item => {
+                          if (item.id === itemId) {
+                              return { ...item, name: newName, price: newPrice };
+                          }
+                          return item;
+                      });
+                      return {
+                          ...session,
+                          parsedReceipt: {
+                              ...session.parsedReceipt,
+                              items: newItems,
+                          },
+                      };
+                  }
+                  
+                  case 'EDIT_TOTALS': {
+                      if (!session.parsedReceipt) return session;
+                      const { newSubtotal, newTax, newTip } = action.payload;
+                      return {
+                          ...session,
+                          parsedReceipt: {
+                              ...session.parsedReceipt,
+                              subtotal: newSubtotal,
+                              tax: newTax,
+                              tip: newTip,
+                          },
+                      };
+                  }
 
                   case 'ASSIGN_ALL_UNASSIGNED': {
                     const { personName } = action.payload;
@@ -254,6 +286,7 @@ const App: React.FC = () => {
   const [isCameraOpen, setCameraOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'receipt' | 'chat'>('receipt');
   const [hasNewMessage, setHasNewMessage] = useState(false);
+  const prevChatHistoryLength = useRef(activeSession?.chatHistory.length ?? 0);
   
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('theme')) {
@@ -321,14 +354,26 @@ const App: React.FC = () => {
     return () => clearInterval(tipInterval);
   }, [activeSession?.status]);
   
+  // Effect to show notification dot for new messages on mobile
   useEffect(() => {
-    // When switching to a new session that's awaiting names, switch to chat tab
-    if (activeSession?.status === 'awaiting_names') {
-        setActiveTab('chat');
-    } else if (activeSession?.status === 'parsing' || activeSession?.status === 'error') {
-        setActiveTab('receipt');
+    if (activeSession) {
+        const currentChatHistoryLength = activeSession.chatHistory.length;
+        if (currentChatHistoryLength > prevChatHistoryLength.current) {
+            const lastMessage = activeSession.chatHistory[currentChatHistoryLength - 1];
+            if (lastMessage && (lastMessage.sender === 'bot' || lastMessage.sender === 'system') && activeTab === 'receipt') {
+                setHasNewMessage(true);
+            }
+        }
+        prevChatHistoryLength.current = currentChatHistoryLength;
     }
-  }, [activeSession?.status, activeSessionId]);
+  }, [activeSession?.chatHistory, activeTab, activeSession]);
+  
+  const handleTabChange = (tab: 'receipt' | 'chat') => {
+      if (tab === 'chat') {
+          setHasNewMessage(false);
+      }
+      setActiveTab(tab);
+  };
 
 
   const currentBillSummary = useMemo(() => 
@@ -423,14 +468,13 @@ const App: React.FC = () => {
                     return acc;
                 }, {});
                 dispatch({ type: 'UPLOAD_SUCCESS', payload: { sessionId: session.id, receipt, initialAssignments } });
-                if (activeTab === 'receipt') setHasNewMessage(true);
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'An unknown error occurred.';
                 dispatch({ type: 'UPLOAD_ERROR', payload: { sessionId: session.id, message } });
             }
         });
     }
-  }, [activeTab]);
+  }, []);
 
   const handleCapture = useCallback((imageBlob: Blob) => {
     const file = new File([imageBlob], `receipt-${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -443,6 +487,8 @@ const App: React.FC = () => {
   const handleSwitchSession = useCallback((sessionId: string) => {
     dispatch({ type: 'SWITCH_SESSION', payload: sessionId });
     setSidebarVisible(false);
+    setActiveTab('receipt'); // Reset to receipt view on session switch
+    setHasNewMessage(false);
   }, []);
 
   const handleDeleteSession = useCallback((sessionId: string) => dispatch({ type: 'DELETE_SESSION', payload: sessionId }), []);
@@ -473,8 +519,7 @@ const App: React.FC = () => {
   const handleDirectAssignment = useCallback((itemId: string, newNames: string[]) => {
     if (!activeSession) return;
     dispatch({ type: 'DIRECT_ASSIGNMENT', payload: { sessionId: activeSession.id, itemId, newNames } });
-    if (activeTab === 'receipt') setHasNewMessage(true);
-  }, [activeSession, activeTab]);
+  }, [activeSession]);
   
   const handleEditPersonName = useCallback((oldName: string, newName: string) => {
     if (!activeSession) return;
@@ -493,18 +538,26 @@ const App: React.FC = () => {
     dispatch({ type: 'EDIT_PERSON_NAME', payload: { sessionId: activeSession.id, oldName, newName: trimmedNewName } });
     addToast(`Name updated: '${oldName}' is now '${trimmedNewName}'.`, 'success');
   }, [activeSession, addToast]);
+  
+  const handleEditItem = useCallback((itemId: string, newName: string, newPrice: number) => {
+      if (!activeSession) return;
+      dispatch({ type: 'EDIT_ITEM', payload: { sessionId: activeSession.id, itemId, newName, newPrice } });
+  }, [activeSession]);
+
+  const handleEditTotals = useCallback((newSubtotal: number, newTax: number, newTip: number) => {
+      if (!activeSession) return;
+      dispatch({ type: 'EDIT_TOTALS', payload: { sessionId: activeSession.id, newSubtotal, newTax, newTip } });
+  }, [activeSession]);
 
   const handleAssignAllUnassigned = useCallback((personName: string) => {
     if (!activeSession) return;
     dispatch({ type: 'ASSIGN_ALL_UNASSIGNED', payload: { sessionId: activeSession.id, personName } });
-    if (activeTab === 'receipt') setHasNewMessage(true);
-  }, [activeSession, activeTab]);
+  }, [activeSession]);
   
   const handleSplitAllEqually = useCallback(() => {
     if (!activeSession) return;
     dispatch({ type: 'SPLIT_ALL_EQUALLY', payload: { sessionId: activeSession.id } });
-    if (activeTab === 'receipt') setHasNewMessage(true);
-  }, [activeSession, activeTab]);
+  }, [activeSession]);
 
   const handleClearChat = useCallback(() => {
     if (!activeSession) return;
@@ -514,19 +567,11 @@ const App: React.FC = () => {
   const handleUndoLastAssignment = useCallback(() => {
     if (activeSession?.assignmentsHistory && activeSession.assignmentsHistory.length > 0) {
         dispatch({ type: 'UNDO_LAST_ASSIGNMENT', payload: { sessionId: activeSession.id } });
-        if (activeTab === 'receipt') setHasNewMessage(true);
     } else {
         addToast("Nothing to undo.", "info");
     }
-  }, [activeSession, addToast, activeTab]);
+  }, [activeSession, addToast]);
   
-  const handleTabChange = useCallback((tab: 'receipt' | 'chat') => {
-      setActiveTab(tab);
-      if (tab === 'chat') {
-          setHasNewMessage(false);
-      }
-  }, []);
-
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
@@ -606,6 +651,8 @@ const App: React.FC = () => {
                 onSplitAllEqually={handleSplitAllEqually}
                 onUndoLastAssignment={handleUndoLastAssignment}
                 isInteractive={activeSession.status === 'ready'}
+                onEditItem={handleEditItem}
+                onEditTotals={handleEditTotals}
             />
         )}
     </>
@@ -663,7 +710,7 @@ const App: React.FC = () => {
             onClose={() => setSidebarVisible(false)}
             fileInputRef={fileInputRef}
           />
-        <main className="flex-grow p-2 sm:p-4 min-w-0 transition-all duration-300 ease-in-out lg:pb-4 pb-20">
+        <main className="flex-grow p-2 sm:p-4 min-w-0 transition-all duration-300 ease-in-out">
             {activeSession ? (
               <>
                 {/* Desktop Layout */}
@@ -677,9 +724,15 @@ const App: React.FC = () => {
                 </div>
 
                 {/* Mobile Layout */}
-                <div className="block lg:hidden h-full">
-                    {activeTab === 'receipt' && <div className="h-full">{receiptContent}</div>}
-                    {activeTab === 'chat' && <div className="h-full">{chatContent}</div>}
+                <div className="lg:hidden h-full flex flex-col">
+                    <div className="flex-grow min-h-0 overflow-y-auto">
+                        {activeTab === 'receipt' ? receiptContent : chatContent}
+                    </div>
+                    <BottomNavBar
+                        activeTab={activeTab}
+                        hasNewMessage={hasNewMessage}
+                        onTabChange={handleTabChange}
+                    />
                 </div>
               </>
             ) : (
@@ -701,13 +754,6 @@ const App: React.FC = () => {
         <CameraCapture 
             onCapture={handleCapture}
             onClose={() => setCameraOpen(false)}
-        />
-      )}
-      {activeSession && (
-        <BottomNavBar 
-          activeTab={activeTab} 
-          onTabChange={handleTabChange} 
-          hasNewMessage={hasNewMessage} 
         />
       )}
     </div>

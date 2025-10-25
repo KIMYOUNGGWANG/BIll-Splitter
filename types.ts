@@ -85,6 +85,8 @@ export type AppAction =
   | { type: 'SEND_MESSAGE_ERROR'; payload: { sessionId: string; message: string } }
   | { type: 'DIRECT_ASSIGNMENT'; payload: { sessionId: string; itemId: string; newNames: string[] } }
   | { type: 'EDIT_PERSON_NAME'; payload: { sessionId: string; oldName: string; newName: string } }
+  | { type: 'EDIT_ITEM'; payload: { sessionId: string; itemId: string; newName: string; newPrice: number } }
+  | { type: 'EDIT_TOTALS'; payload: { sessionId: string; newSubtotal: number; newTax: number; newTip: number } }
   | { type: 'ASSIGN_ALL_UNASSIGNED'; payload: { sessionId: string; personName: string } }
   | { type: 'SPLIT_ALL_EQUALLY'; payload: { sessionId: string } }
   | { type: 'CLEAR_CHAT_HISTORY'; payload: { sessionId: string } }
