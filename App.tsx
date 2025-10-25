@@ -2,6 +2,7 @@ import React, { useReducer, useMemo, useState, useEffect, useCallback, useRef } 
 import SessionSidebar from './components/SessionSidebar';
 import ReceiptDisplay from './components/ReceiptDisplay';
 import ChatInterface from './components/ChatInterface';
+import CameraCapture from './components/CameraCapture';
 import { parseReceipt, updateAssignments } from './services/geminiService';
 import { calculateBillSummary } from './utils/billCalculator';
 import { formatAssignmentMessage, formatAssignmentUpdateMessage } from './utils/messageFormatter';
@@ -26,6 +27,15 @@ function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         sessions: [...state.sessions, ...action.payload.sessions],
         activeSessionId: state.activeSessionId ?? action.payload.makeActiveId,
+      };
+
+    case 'SET_SESSION_IMAGE':
+      return {
+        ...state,
+        sessions: state.sessions.map(s => s.id === action.payload.sessionId ? {
+          ...s,
+          receiptImage: action.payload.imageUrl
+        } : s),
       };
 
     case 'UPLOAD_SUCCESS':
@@ -239,6 +249,7 @@ const App: React.FC = () => {
   const { addToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentTipIndex, setCurrentTipIndex] = useState(0);
+  const [isCameraOpen, setCameraOpen] = useState(false);
   
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('theme')) {
@@ -315,16 +326,58 @@ const App: React.FC = () => {
     [activeSession?.parsedReceipt, activeSession?.assignments, activeSession?.people]
   );
 
+  const SUPPORTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+
   const fileToBase64 = (file: File): Promise<[string, string]> => {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const base64 = result.split(',')[1];
-        resolve([base64, file.type]);
-      };
-      reader.onerror = error => reject(error);
-      reader.readAsDataURL(file);
+      if (SUPPORTED_MIME_TYPES.includes(file.type)) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(',')[1];
+          resolve([base64, file.type]);
+        };
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+      } else {
+        // For unsupported types, try to convert via canvas
+        const objectUrl = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            // Resize image for performance
+            const MAX_WIDTH = 1920;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > MAX_WIDTH) {
+              height = (MAX_WIDTH / width) * height;
+              width = MAX_WIDTH;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              return reject(new Error('Failed to get canvas context for image conversion.'));
+            }
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+            const base64 = dataUrl.split(',')[1];
+            resolve([base64, 'image/jpeg']);
+          } catch (e) {
+            reject(e);
+          } finally {
+             URL.revokeObjectURL(objectUrl);
+          }
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error(`The file type (${file.type}) is not supported and could not be converted. Please try a standard image format like JPEG or PNG.`));
+        };
+        img.src = objectUrl;
+      }
     });
   };
 
@@ -337,7 +390,7 @@ const App: React.FC = () => {
         const id = i === 0 ? firstId : `session-${Date.now()}-${Math.random()}`;
         newSessions.push({
             id: id, name: file.name, status: 'parsing', errorMessage: null,
-            parsedReceipt: null, assignments: {}, assignmentsHistory: [], chatHistory: [], people: []
+            parsedReceipt: null, receiptImage: null, assignments: {}, assignmentsHistory: [], chatHistory: [], people: []
         });
     }
 
@@ -348,6 +401,8 @@ const App: React.FC = () => {
             try {
                 const file = files[index];
                 const [base64, mimeType] = await fileToBase64(file);
+                const imageUrl = `data:${mimeType};base64,${base64}`;
+                dispatch({ type: 'SET_SESSION_IMAGE', payload: { sessionId: session.id, imageUrl } });
                 const receipt = await parseReceipt(base64, mimeType);
                 const initialAssignments = receipt.items.reduce<Assignments>((acc, item) => {
                     acc[item.id] = [];
@@ -361,6 +416,14 @@ const App: React.FC = () => {
         });
     }
   }, []);
+
+  const handleCapture = useCallback((imageBlob: Blob) => {
+    const file = new File([imageBlob], `receipt-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    handleAddReceipts(dataTransfer.files);
+    setCameraOpen(false);
+  }, [handleAddReceipts]);
   
   const handleSwitchSession = useCallback((sessionId: string) => {
     dispatch({ type: 'SWITCH_SESSION', payload: sessionId });
@@ -486,6 +549,7 @@ const App: React.FC = () => {
             onAddReceipts={handleAddReceipts}
             onSwitchSession={handleSwitchSession}
             onDeleteSession={handleDeleteSession}
+            onOpenCamera={() => setCameraOpen(true)}
             isVisible={isSidebarVisible}
             onClose={() => setSidebarVisible(false)}
             fileInputRef={fileInputRef}
@@ -551,6 +615,7 @@ const App: React.FC = () => {
                             receipt={activeSession.parsedReceipt}
                             assignments={activeSession.assignments}
                             people={activeSession.people}
+                            receiptImage={activeSession.receiptImage}
                             isUndoable={activeSession.assignmentsHistory.length > 0}
                             onUpdateAssignment={handleDirectAssignment}
                             onAssignAllUnassigned={handleAssignAllUnassigned}
@@ -587,6 +652,12 @@ const App: React.FC = () => {
             )}
         </main>
       </div>
+      {isCameraOpen && (
+        <CameraCapture 
+            onCapture={handleCapture}
+            onClose={() => setCameraOpen(false)}
+        />
+      )}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 
+
 export interface ReceiptItem {
   id: string;
   name: string;
@@ -56,6 +57,7 @@ export interface ReceiptSession {
   status: AppStatus;
   errorMessage: string | null;
   parsedReceipt: ParsedReceipt | null;
+  receiptImage: string | null; // Data URL for the receipt image
   assignments: Assignments;
   assignmentsHistory: Assignments[]; // For multi-level undo functionality
   chatHistory: ChatMessage[];
@@ -72,6 +74,7 @@ export interface AppState {
 export type AppAction =
   | { type: 'LOAD_SESSIONS'; payload: AppState }
   | { type: 'ADD_SESSIONS'; payload: { sessions: ReceiptSession[]; makeActiveId: string } }
+  | { type: 'SET_SESSION_IMAGE'; payload: { sessionId: string; imageUrl: string } }
   | { type: 'UPLOAD_SUCCESS'; payload: { sessionId: string; receipt: ParsedReceipt; initialAssignments: Assignments } }
   | { type: 'UPLOAD_ERROR'; payload: { sessionId: string; message: string } }
   | { type: 'SWITCH_SESSION'; payload: string }

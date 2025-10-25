@@ -1,5 +1,7 @@
 {
   "name": "Splitly AI",
   "description": "Snap a receipt, chat to split. Effortlessly manage group bills with AI-powered receipt parsing and a smart chat interface.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera"
+  ]
 }

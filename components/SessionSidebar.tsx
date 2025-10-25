@@ -9,6 +9,7 @@ interface SessionSidebarProps {
   onAddReceipts: (files: FileList) => void;
   onSwitchSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
+  onOpenCamera: () => void;
   onClose: () => void;
   fileInputRef: React.RefObject<HTMLInputElement>;
 }
@@ -87,7 +88,7 @@ const SessionItem: React.FC<{ session: ReceiptSession; isActive: boolean; onSwit
 };
 
 
-const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSessionId, isVisible, onAddReceipts, onSwitchSession, onDeleteSession, onClose, fileInputRef }) => {
+const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSessionId, isVisible, onAddReceipts, onSwitchSession, onDeleteSession, onOpenCamera, onClose, fileInputRef }) => {
 
   const handleAddClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -134,19 +135,31 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSession
               ref={fileInputRef}
               onChange={handleFileChange}
               multiple
-              accept="image/png, image/jpeg, image/webp"
+              accept="image/*"
               className="hidden"
               aria-hidden="true"
             />
-            <button
-              onClick={handleAddClick}
-              className="w-full bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-              </svg>
-              Add Receipt(s)
-            </button>
+            <div className="space-y-2">
+                <button
+                  onClick={handleAddClick}
+                  className="w-full bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                  </svg>
+                  Add Receipt(s)
+                </button>
+                <button
+                  onClick={onOpenCamera}
+                  className="w-full bg-primary-focus/80 dark:bg-primary-dark/30 hover:bg-primary-focus dark:hover:bg-primary-dark/50 text-on-primary dark:text-text-primary-dark font-bold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                    <path d="M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.165a.75.75 0 0 1-.54-.22l-.935-.935a.75.75 0 0 0-1.06 0l-.935.935a.75.75 0 0 1-.54.22H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Z" />
+                    <path d="M10 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM8.25 10a1.75 1.75 0 1 1 3.5 0 1.75 1.75 0 0 1-3.5 0Z" />
+                  </svg>
+                  Use Camera
+                </button>
+            </div>
           </div>
         </aside>
     </>

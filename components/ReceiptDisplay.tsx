@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { ParsedReceipt, Assignments, ReceiptItem } from '../types';
 import ConfirmationModal from './ConfirmationModal';
+import ImageZoomModal from './ImageZoomModal';
 
 interface ReceiptItemViewProps {
   item: ReceiptItem;
@@ -12,6 +13,7 @@ interface ReceiptItemViewProps {
   onEditClick: (itemId: string) => void;
   onUpdateAssignment: (itemId: string, newNames: string[]) => void;
   onCancelEdit: () => void;
+  onZoomRequest: () => void;
 }
 
 const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
@@ -22,7 +24,8 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
   editingItemId,
   onEditClick,
   onUpdateAssignment,
-  onCancelEdit
+  onCancelEdit,
+  onZoomRequest
 }) => {
   const [selectedNames, setSelectedNames] = useState<string[]>([]);
   const [isUnassignConfirmOpen, setIsUnassignConfirmOpen] = useState(false);
@@ -60,7 +63,14 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
   return (
     <>
         <div className={`p-3 rounded-md border border-border dark:border-border-dark transition-colors ${isEditing ? 'bg-primary/5 dark:bg-primary-dark/10 ring-2 ring-primary dark:ring-primary-dark' : 'bg-background dark:bg-background-dark'}`}>
-          <div className="flex justify-between items-start gap-2">
+          <div 
+            className="flex justify-between items-start gap-2 cursor-pointer"
+            onClick={onZoomRequest}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onZoomRequest()}
+            aria-label={`Zoom in on ${item.name}`}
+          >
             <div className="flex items-center gap-2 flex-1 min-w-0">
                 <div 
                     className={`w-2 h-2 rounded-full flex-shrink-0 ${isAssigned ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-500'}`}
@@ -141,6 +151,7 @@ interface ReceiptDisplayProps {
   receipt: ParsedReceipt;
   assignments: Assignments;
   people: string[];
+  receiptImage: string | null;
   isUndoable: boolean;
   onUpdateAssignment: (itemId: string, newNames: string[]) => void;
   onAssignAllUnassigned: (personName: string) => void;
@@ -149,10 +160,11 @@ interface ReceiptDisplayProps {
   isInteractive: boolean;
 }
 
-const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, people, isUndoable, onUpdateAssignment, onAssignAllUnassigned, onSplitAllEqually, onUndoLastAssignment, isInteractive }) => {
+const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, people, receiptImage, isUndoable, onUpdateAssignment, onAssignAllUnassigned, onSplitAllEqually, onUndoLastAssignment, isInteractive }) => {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [isAssignAllModalOpen, setIsAssignAllModalOpen] = useState(false);
   const [isSplitAllModalOpen, setIsSplitAllModalOpen] = useState(false);
+  const [isZoomModalOpen, setZoomModalOpen] = useState(false);
   const [selectedPersonForAssignAll, setSelectedPersonForAssignAll] = useState<string>('');
   const [filterQuery, setFilterQuery] = useState('');
   
@@ -262,6 +274,7 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
                 onEditClick={setEditingItemId}
                 onUpdateAssignment={handleUpdateAssignment}
                 onCancelEdit={handleCancelEdit}
+                onZoomRequest={() => setZoomModalOpen(true)}
               />
             ))}
             {filteredItems.length === 0 && (
@@ -341,6 +354,11 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
             title="Split All Items Equally"
             message={`Are you sure you want to assign every item on this receipt to all ${people.length} people? This will overwrite all current assignments.`}
             variant="primary"
+        />
+        <ImageZoomModal
+            isOpen={isZoomModalOpen}
+            onClose={() => setZoomModalOpen(false)}
+            imageUrl={receiptImage}
         />
     </>
   );
