@@ -83,11 +83,21 @@ export async function parseReceipt(imageBase64: string, mimeType: string): Promi
   }
 }
 
+// In-memory cache for assignment requests
+const assignmentCache = new Map<string, AssignmentUpdate>();
+
 export async function updateAssignments(
   userInput: string,
   items: ReceiptItem[],
   currentAssignments: Assignments
 ): Promise<AssignmentUpdate> {
+    // 1. Caching: Create a unique key for the current state and input.
+    const cacheKey = JSON.stringify({ userInput, items: items.map(i => i.id), currentAssignments });
+    if (assignmentCache.has(cacheKey)) {
+        console.log("Returning cached assignment result.");
+        return assignmentCache.get(cacheKey)!;
+    }
+
     const assignmentSchema = {
         type: Type.OBJECT,
         properties: {
@@ -120,6 +130,8 @@ export async function updateAssignments(
         required: ["botResponse", "assignments"]
     };
 
+  // 2. Prompt Trimming: Create a lightweight version of items for the prompt.
+  const lightweightItems = items.map(({ id, name }) => ({ id, name }));
 
   const prompt = `You are a bill splitting assistant. Your task is to update item assignments based on a user's request and provide a conversational summary of the action taken.
   
@@ -129,7 +141,7 @@ Respond ONLY with a JSON object. This object must contain two keys: "botResponse
 1.  "botResponse": A friendly, natural language string summarizing the changes you made.
 2.  "assignments": An array of objects, where each object represents an item from the receipt and has an "itemId" and a "names" array. Every single item from the original receipt must be present in your response. If an item is unassigned, its "names" array should be empty.
 
-Current items: ${JSON.stringify(items, null, 2)}
+Current items: ${JSON.stringify(lightweightItems, null, 2)}
 Current assignments: ${JSON.stringify(currentAssignments, null, 2)}
 User command: "${userInput}"
 
@@ -162,10 +174,15 @@ Your response must be a valid JSON object following the specified structure.
         }
     }
 
-    return {
+    const result: AssignmentUpdate = {
         newAssignments,
         botResponse: parsedResponse.botResponse || "I've updated the assignments."
     };
+    
+    // Store the successful result in the cache before returning.
+    assignmentCache.set(cacheKey, result);
+    
+    return result;
   } catch (e) {
     console.error("Failed to parse assignment JSON:", e, "Raw response:", response.text);
     throw new Error("The AI failed to return a valid assignment structure. Please try rephrasing your command.");

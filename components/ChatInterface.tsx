@@ -387,6 +387,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
               </svg>
             </button>
           </form>
+          <div className="text-xs text-text-secondary dark:text-text-secondary-dark text-center pt-2 mt-2 flex items-center justify-center gap-4 border-t border-border dark:border-border-dark">
+            <span className="flex items-center gap-1">
+                <kbd className="px-2 py-1.5 text-xs font-sans font-semibold text-text-secondary dark:text-text-secondary-dark bg-background dark:bg-background-dark rounded border border-b-2 border-border dark:border-border-dark">
+                Ctrl
+                </kbd>
+                <span>+</span>
+                <kbd className="px-2 py-1.5 text-xs font-sans font-semibold text-text-secondary dark:text-text-secondary-dark bg-background dark:bg-background-dark rounded border border-b-2 border-border dark:border-border-dark">
+                K
+                </kbd>
+                <span className="ml-1">to focus</span>
+            </span>
+            <span className="flex items-center gap-1">
+                <kbd className="px-2 py-1.5 text-xs font-sans font-semibold text-text-secondary dark:text-text-secondary-dark bg-background dark:bg-background-dark rounded border border-b-2 border-border dark:border-border-dark">
+                Ctrl
+                </kbd>
+                <span>+</span>
+                <kbd className="px-2 py-1.5 text-xs font-sans font-semibold text-text-secondary dark:text-text-secondary-dark bg-background dark:bg-background-dark rounded border border-b-2 border-border dark:border-border-dark">
+                Z
+                </kbd>
+                <span className="ml-1">to undo</span>
+            </span>
+          </div>
         </div>
         <ConfirmationModal
             isOpen={isClearConfirmOpen}

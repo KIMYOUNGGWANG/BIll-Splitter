@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useCallback } from 'react';
 import type { ReceiptSession } from '../types';
 import ConfirmationModal from './ConfirmationModal';
@@ -11,6 +10,7 @@ interface SessionSidebarProps {
   onSwitchSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onClose: () => void;
+  fileInputRef: React.RefObject<HTMLInputElement>;
 }
 
 const SessionItem: React.FC<{ session: ReceiptSession; isActive: boolean; onSwitch: () => void; onDelete: () => void; }> = ({ session, isActive, onSwitch, onDelete }) => {
@@ -87,12 +87,11 @@ const SessionItem: React.FC<{ session: ReceiptSession; isActive: boolean; onSwit
 };
 
 
-const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSessionId, isVisible, onAddReceipts, onSwitchSession, onDeleteSession, onClose }) => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSessionId, isVisible, onAddReceipts, onSwitchSession, onDeleteSession, onClose, fileInputRef }) => {
 
   const handleAddClick = useCallback(() => {
     fileInputRef.current?.click();
-  }, []);
+  }, [fileInputRef]);
 
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {

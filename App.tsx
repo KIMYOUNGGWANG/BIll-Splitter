@@ -1,4 +1,4 @@
-import React, { useReducer, useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useReducer, useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import SessionSidebar from './components/SessionSidebar';
 import ReceiptDisplay from './components/ReceiptDisplay';
 import ChatInterface from './components/ChatInterface';
@@ -14,9 +14,13 @@ const initialState: AppState = {
 };
 
 const MAX_UNDO_HISTORY = 10;
+const LOCAL_STORAGE_KEY = 'splitly-ai-sessions';
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
+    case 'LOAD_SESSIONS':
+      return action.payload;
+    
     case 'ADD_SESSIONS':
       return {
         ...state,
@@ -67,6 +71,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
     }
 
     case 'RESET_APP':
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
         return initialState;
 
     default: {
@@ -152,7 +157,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     for (const itemId in session.assignments) {
                       updatedAssignments[itemId] = session.assignments[itemId].map(p => p === oldName ? newName : p);
                     }
-                    // This is not an undoable assignment action, so we don't save the history.
                     return { ...session, people: updatedPeople, assignments: updatedAssignments };
                   }
 
@@ -219,11 +223,22 @@ function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
+const loadingTips = [
+  "Pro tip: You can say 'split this evenly' for shared items.",
+  "Use Ctrl+Z or Cmd+Z to undo your last assignment.",
+  "You can click on any item's name to edit its price.",
+  "Tax and tip are automatically divided proportionally.",
+  "Use the sidebar to manage multiple receipts at once.",
+];
+
+
 const App: React.FC = () => {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const { sessions, activeSessionId } = state;
   const activeSession = sessions.find(s => s.id === activeSessionId) || null;
   const { addToast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentTipIndex, setCurrentTipIndex] = useState(0);
   
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('theme')) {
@@ -236,6 +251,33 @@ const App: React.FC = () => {
   });
   const [isSidebarVisible, setSidebarVisible] = useState(false);
 
+  // Load state from localStorage on initial render
+  useEffect(() => {
+    try {
+        const savedState = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (savedState) {
+            const parsedState = JSON.parse(savedState);
+            dispatch({ type: 'LOAD_SESSIONS', payload: parsedState });
+        }
+    } catch (error) {
+        console.error("Failed to load sessions from localStorage", error);
+        dispatch({ type: 'RESET_APP' });
+    }
+  }, []);
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    try {
+        if (state.sessions.length > 0 || state.activeSessionId) {
+             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+        } else {
+             localStorage.removeItem(LOCAL_STORAGE_KEY);
+        }
+    } catch (error) {
+        console.error("Failed to save sessions to localStorage", error);
+    }
+  }, [state]);
+
   useEffect(() => {
     const root = window.document.documentElement;
     const isDark = theme === 'dark';
@@ -243,6 +285,27 @@ const App: React.FC = () => {
     localStorage.setItem('theme', theme);
   }, [theme]);
   
+  useEffect(() => {
+    if (isSidebarVisible) {
+      document.body.classList.add('modal-open');
+    } else {
+      document.body.classList.remove('modal-open');
+    }
+    return () => {
+      document.body.classList.remove('modal-open');
+    }
+  }, [isSidebarVisible]);
+  
+  useEffect(() => {
+    let tipInterval: number;
+    if (activeSession?.status === 'parsing') {
+        tipInterval = window.setInterval(() => {
+            setCurrentTipIndex(prevIndex => (prevIndex + 1) % loadingTips.length);
+        }, 3000);
+    }
+    return () => clearInterval(tipInterval);
+  }, [activeSession?.status]);
+
   const currentBillSummary = useMemo(() => 
     calculateBillSummary(
       activeSession?.parsedReceipt ?? null, 
@@ -425,25 +488,62 @@ const App: React.FC = () => {
             onDeleteSession={handleDeleteSession}
             isVisible={isSidebarVisible}
             onClose={() => setSidebarVisible(false)}
+            fileInputRef={fileInputRef}
           />
         <main className="flex-grow p-2 sm:p-4 min-w-0 transition-all duration-300 ease-in-out">
             {activeSession ? (
               <div className="flex flex-col lg:flex-row gap-4 h-full">
                 <div className="w-full lg:w-1/2 h-full min-h-[500px]">
                     {activeSession.status === 'error' && (
-                       <div className="flex flex-col items-center justify-center h-full p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-10 h-10 text-red-500 mb-4"><path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" /></svg>
-                          <h3 className="text-xl font-bold text-red-600 dark:text-red-400">Parsing Failed</h3>
-                          <p className="text-text-secondary dark:text-text-secondary-dark text-center mt-2 max-w-md">{activeSession.errorMessage}</p>
+                       <div className="flex flex-col items-center justify-center h-full p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark text-center">
+                          <div className="text-6xl mb-6 animate-bounce">😕</div>
+                          <h3 className="text-2xl font-bold mb-3 text-text-primary dark:text-text-primary-dark">Hmm, couldn't read that</h3>
+                          <p className="text-center mb-6 max-w-md text-text-secondary dark:text-text-secondary-dark">
+                            {activeSession.errorMessage}
+                          </p>
+                          <div className="bg-background dark:bg-background-dark rounded-lg p-6 mb-6 max-w-md w-full">
+                            <h4 className="font-bold mb-3 flex items-center gap-2 text-text-primary dark:text-text-primary-dark">
+                              <span>💡</span>
+                              <span>Tips for better results:</span>
+                            </h4>
+                            <ul className="text-sm space-y-2 text-left text-text-secondary dark:text-text-secondary-dark">
+                              <li className="flex items-start gap-2">
+                                <span className="text-green-500">✓</span>
+                                <span>Ensure good lighting and focus</span>
+                              </li>
+                              <li className="flex items-start gap-2">
+                                <span className="text-green-500">✓</span>
+                                <span>Capture the entire receipt</span>
+                              </li>
+                              <li className="flex items-start gap-2">
+                                <span className="text-green-500">✓</span>
+                                <span>Avoid shadows and glare</span>
+                              </li>
+                            </ul>
+                          </div>
+                          <button 
+                            onClick={() => fileInputRef.current?.click()}
+                            className="bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-2 px-6 rounded-lg transition-colors"
+                          >
+                            Try Another Receipt
+                          </button>
                        </div>
                     )}
                     {activeSession.status === 'parsing' && (
                         <div className="flex flex-col items-center justify-center h-full p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark">
-                            <svg className="animate-spin h-10 w-10 text-primary dark:text-primary-dark mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <svg className="animate-spin h-12 w-12 text-primary dark:text-primary-dark mb-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <span className="text-lg font-semibold text-primary dark:text-primary-dark">Parsing Receipt...</span>
+                            <h3 className="text-xl font-semibold mb-2 text-text-primary dark:text-text-primary-dark">Reading your receipt...</h3>
+                            <p className="text-text-secondary dark:text-text-secondary-dark mb-6 text-center max-w-md">
+                                {loadingTips[currentTipIndex]}
+                            </p>
+                            <div className="flex gap-2">
+                                <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse"></div>
+                                <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse [animation-delay:0.2s]"></div>
+                                <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse [animation-delay:0.4s]"></div>
+                            </div>
                         </div>
                     )}
                     {activeSession.parsedReceipt && (
@@ -473,9 +573,16 @@ const App: React.FC = () => {
                 </div>
               </div>
             ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                    <h2 className="text-3xl font-bold text-text-primary dark:text-text-primary-dark mb-2">Welcome!</h2>
-                    <p className="text-text-secondary dark:text-text-secondary-dark">Add a receipt using the sidebar to get started.</p>
+                <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark">
+                    <div className="text-6xl mb-6">📄✨</div>
+                    <h2 className="text-3xl font-bold mb-3 text-text-primary dark:text-text-primary-dark">Welcome to Splitly AI</h2>
+                    <p className="max-w-md mb-8 text-text-secondary dark:text-text-secondary-dark">The smartest way to split bills. Just upload a receipt and let our AI do the heavy lifting.</p>
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-3 px-8 rounded-lg transition-transform transform hover:scale-105"
+                    >
+                      Upload Your First Receipt
+                    </button>
                 </div>
             )}
         </main>
@@ -483,5 +590,5 @@ const App: React.FC = () => {
     </div>
   );
 };
-
+// Fix: Add default export for App component
 export default App;

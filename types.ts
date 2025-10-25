@@ -70,6 +70,7 @@ export interface AppState {
 
 // Refactored Actions for multi-session support
 export type AppAction =
+  | { type: 'LOAD_SESSIONS'; payload: AppState }
   | { type: 'ADD_SESSIONS'; payload: { sessions: ReceiptSession[]; makeActiveId: string } }
   | { type: 'UPLOAD_SUCCESS'; payload: { sessionId: string; receipt: ParsedReceipt; initialAssignments: Assignments } }
   | { type: 'UPLOAD_ERROR'; payload: { sessionId: string; message: string } }

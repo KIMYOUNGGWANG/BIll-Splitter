@@ -3,7 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Splitly AI</title>
+    
+    <!-- Primary Meta Tags -->
+    <title>Splitly AI - Split Bills Instantly</title>
+    <meta name="title" content="Splitly AI - Split Bills Instantly">
+    <meta name="description" content="Upload a receipt and let AI split the bill. Say 'Alice had the burger' in natural language. Fast, fair, and free!">
+    <meta name="keywords" content="bill splitter, split bill, receipt scanner, ai bill split, expense sharing, group expenses, receipt splitting, Gemini AI">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://splitly-ai.vercel.app/">
+    <meta property="og:title" content="Splitly AI - Split Bills Instantly">
+    <meta property="og:description" content="Upload a receipt, let AI do the math. No more awkward calculations!">
+    <!-- Note: For the OG image to work, you'd need to add an 'og-image.png' to your public assets -->
+    <meta property="og:image" content="https://splitly-ai.vercel.app/og-image.png"> 
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://splitly-ai.vercel.app/">
+    <meta property="twitter:title" content="Splitly AI - Split Bills Instantly">
+    <meta property="twitter:description" content="Upload a receipt, let AI do the math. No more awkward calculations!">
+    <meta property="twitter:image" content="https://splitly-ai.vercel.app/og-image.png">
+
+    <!-- Favicon -->
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -57,6 +82,11 @@
   }
 }
 </script>
+<style>
+  body.modal-open {
+    overflow: hidden;
+  }
+</style>
 </head>
   <body class="bg-background text-text-primary dark:bg-background-dark dark:text-text-primary-dark">
     <div id="root"></div>
