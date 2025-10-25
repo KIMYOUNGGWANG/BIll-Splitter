@@ -84,8 +84,14 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
           {isEditing ? (
             <div className="mt-2 animate-fade-in" id={`edit-assignment-${item.id}`}>
               <fieldset>
-                <legend className="text-sm font-medium text-text-secondary dark:text-text-secondary-dark mb-1">Assign to:</legend>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
+                 <div className="flex justify-between items-center mb-1">
+                    <legend className="text-sm font-medium text-text-secondary dark:text-text-secondary-dark">Assign to:</legend>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setSelectedNames(people)} className="px-2 py-0.5 text-xs font-semibold text-primary dark:text-primary-dark bg-primary/10 hover:bg-primary/20 rounded-md transition-colors">All</button>
+                        <button onClick={() => setSelectedNames([])} className="px-2 py-0.5 text-xs font-semibold text-text-secondary dark:text-text-secondary-dark bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 rounded-md transition-colors">None</button>
+                    </div>
+                </div>
+                <div className="space-y-1 max-h-32 overflow-y-auto border-y border-border dark:border-border-dark py-1">
                   {people.map(person => (
                     <label key={person} className="flex items-center text-sm cursor-pointer p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
                       <input
@@ -100,7 +106,15 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
                           );
                         }}
                       />
-                      <span className="ml-2 text-text-primary dark:text-text-primary-dark">{person}</span>
+                       <span
+                        className="ml-2 text-text-primary dark:text-text-primary-dark flex-grow"
+                        onClick={(e) => {
+                          e.preventDefault(); // Prevents label from toggling checkbox
+                          setSelectedNames([person]); // Assigns to only this person
+                        }}
+                      >
+                        {person}
+                      </span>
                     </label>
                   ))}
                 </div>

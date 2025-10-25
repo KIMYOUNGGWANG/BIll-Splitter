@@ -1,8 +1,10 @@
+
 import React, { useReducer, useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import SessionSidebar from './components/SessionSidebar';
 import ReceiptDisplay from './components/ReceiptDisplay';
 import ChatInterface from './components/ChatInterface';
 import CameraCapture from './components/CameraCapture';
+import BottomNavBar from './components/BottomNavBar';
 import { parseReceipt, updateAssignments } from './services/geminiService';
 import { calculateBillSummary } from './utils/billCalculator';
 import { formatAssignmentMessage, formatAssignmentUpdateMessage } from './utils/messageFormatter';
@@ -26,7 +28,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         sessions: [...state.sessions, ...action.payload.sessions],
-        activeSessionId: state.activeSessionId ?? action.payload.makeActiveId,
+        activeSessionId: action.payload.makeActiveId,
       };
 
     case 'SET_SESSION_IMAGE':
@@ -250,6 +252,8 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentTipIndex, setCurrentTipIndex] = useState(0);
   const [isCameraOpen, setCameraOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'receipt' | 'chat'>('receipt');
+  const [hasNewMessage, setHasNewMessage] = useState(false);
   
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('theme')) {
@@ -316,6 +320,16 @@ const App: React.FC = () => {
     }
     return () => clearInterval(tipInterval);
   }, [activeSession?.status]);
+  
+  useEffect(() => {
+    // When switching to a new session that's awaiting names, switch to chat tab
+    if (activeSession?.status === 'awaiting_names') {
+        setActiveTab('chat');
+    } else if (activeSession?.status === 'parsing' || activeSession?.status === 'error') {
+        setActiveTab('receipt');
+    }
+  }, [activeSession?.status, activeSessionId]);
+
 
   const currentBillSummary = useMemo(() => 
     calculateBillSummary(
@@ -409,13 +423,14 @@ const App: React.FC = () => {
                     return acc;
                 }, {});
                 dispatch({ type: 'UPLOAD_SUCCESS', payload: { sessionId: session.id, receipt, initialAssignments } });
+                if (activeTab === 'receipt') setHasNewMessage(true);
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'An unknown error occurred.';
                 dispatch({ type: 'UPLOAD_ERROR', payload: { sessionId: session.id, message } });
             }
         });
     }
-  }, []);
+  }, [activeTab]);
 
   const handleCapture = useCallback((imageBlob: Blob) => {
     const file = new File([imageBlob], `receipt-${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -458,7 +473,8 @@ const App: React.FC = () => {
   const handleDirectAssignment = useCallback((itemId: string, newNames: string[]) => {
     if (!activeSession) return;
     dispatch({ type: 'DIRECT_ASSIGNMENT', payload: { sessionId: activeSession.id, itemId, newNames } });
-  }, [activeSession]);
+    if (activeTab === 'receipt') setHasNewMessage(true);
+  }, [activeSession, activeTab]);
   
   const handleEditPersonName = useCallback((oldName: string, newName: string) => {
     if (!activeSession) return;
@@ -481,12 +497,14 @@ const App: React.FC = () => {
   const handleAssignAllUnassigned = useCallback((personName: string) => {
     if (!activeSession) return;
     dispatch({ type: 'ASSIGN_ALL_UNASSIGNED', payload: { sessionId: activeSession.id, personName } });
-  }, [activeSession]);
+    if (activeTab === 'receipt') setHasNewMessage(true);
+  }, [activeSession, activeTab]);
   
   const handleSplitAllEqually = useCallback(() => {
     if (!activeSession) return;
     dispatch({ type: 'SPLIT_ALL_EQUALLY', payload: { sessionId: activeSession.id } });
-  }, [activeSession]);
+    if (activeTab === 'receipt') setHasNewMessage(true);
+  }, [activeSession, activeTab]);
 
   const handleClearChat = useCallback(() => {
     if (!activeSession) return;
@@ -496,10 +514,18 @@ const App: React.FC = () => {
   const handleUndoLastAssignment = useCallback(() => {
     if (activeSession?.assignmentsHistory && activeSession.assignmentsHistory.length > 0) {
         dispatch({ type: 'UNDO_LAST_ASSIGNMENT', payload: { sessionId: activeSession.id } });
+        if (activeTab === 'receipt') setHasNewMessage(true);
     } else {
         addToast("Nothing to undo.", "info");
     }
-  }, [activeSession, addToast]);
+  }, [activeSession, addToast, activeTab]);
+  
+  const handleTabChange = useCallback((tab: 'receipt' | 'chat') => {
+      setActiveTab(tab);
+      if (tab === 'chat') {
+          setHasNewMessage(false);
+      }
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -513,6 +539,89 @@ const App: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleUndoLastAssignment]);
+
+  const receiptContent = activeSession && (
+    <>
+        {activeSession.status === 'error' && (
+           <div className="flex flex-col items-center justify-center h-full p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark text-center">
+              <div className="text-6xl mb-6 animate-bounce">😕</div>
+              <h3 className="text-2xl font-bold mb-3 text-text-primary dark:text-text-primary-dark">Hmm, couldn't read that</h3>
+              <p className="text-center mb-6 max-w-md text-text-secondary dark:text-text-secondary-dark">
+                {activeSession.errorMessage}
+              </p>
+              <div className="bg-background dark:bg-background-dark rounded-lg p-6 mb-6 max-w-md w-full">
+                <h4 className="font-bold mb-3 flex items-center gap-2 text-text-primary dark:text-text-primary-dark">
+                  <span>💡</span>
+                  <span>Tips for better results:</span>
+                </h4>
+                <ul className="text-sm space-y-2 text-left text-text-secondary dark:text-text-secondary-dark">
+                  <li className="flex items-start gap-2">
+                    <span className="text-green-500">✓</span>
+                    <span>Ensure good lighting and focus</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-green-500">✓</span>
+                    <span>Capture the entire receipt</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-green-500">✓</span>
+                    <span>Avoid shadows and glare</span>
+                  </li>
+                </ul>
+              </div>
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-2 px-6 rounded-lg transition-colors"
+              >
+                Try Another Receipt
+              </button>
+           </div>
+        )}
+        {activeSession.status === 'parsing' && (
+            <div className="flex flex-col items-center justify-center h-full p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark">
+                <svg className="animate-spin h-12 w-12 text-primary dark:text-primary-dark mb-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <h3 className="text-xl font-semibold mb-2 text-text-primary dark:text-text-primary-dark">Reading your receipt...</h3>
+                <p className="text-text-secondary dark:text-text-secondary-dark mb-6 text-center max-w-md">
+                    {loadingTips[currentTipIndex]}
+                </p>
+                <div className="flex gap-2">
+                    <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse"></div>
+                    <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse [animation-delay:0.2s]"></div>
+                    <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse [animation-delay:0.4s]"></div>
+                </div>
+            </div>
+        )}
+        {activeSession.parsedReceipt && (
+            <ReceiptDisplay
+                receipt={activeSession.parsedReceipt}
+                assignments={activeSession.assignments}
+                people={activeSession.people}
+                receiptImage={activeSession.receiptImage}
+                isUndoable={activeSession.assignmentsHistory.length > 0}
+                onUpdateAssignment={handleDirectAssignment}
+                onAssignAllUnassigned={handleAssignAllUnassigned}
+                onSplitAllEqually={handleSplitAllEqually}
+                onUndoLastAssignment={handleUndoLastAssignment}
+                isInteractive={activeSession.status === 'ready'}
+            />
+        )}
+    </>
+  );
+
+  const chatContent = activeSession && (
+    <ChatInterface
+        messages={activeSession.chatHistory}
+        summary={currentBillSummary}
+        activeSession={activeSession}
+        onSendMessage={handleSendMessage}
+        onSetPeople={handleSetPeople}
+        onEditPersonName={handleEditPersonName}
+        onClearChat={handleClearChat}
+    />
+  );
 
   return (
     <div className="h-screen bg-background dark:bg-background-dark font-sans flex flex-col">
@@ -554,89 +663,25 @@ const App: React.FC = () => {
             onClose={() => setSidebarVisible(false)}
             fileInputRef={fileInputRef}
           />
-        <main className="flex-grow p-2 sm:p-4 min-w-0 transition-all duration-300 ease-in-out">
+        <main className="flex-grow p-2 sm:p-4 min-w-0 transition-all duration-300 ease-in-out lg:pb-4 pb-20">
             {activeSession ? (
-              <div className="flex flex-col lg:flex-row gap-4 h-full">
-                <div className="w-full lg:w-1/2 h-full min-h-[500px]">
-                    {activeSession.status === 'error' && (
-                       <div className="flex flex-col items-center justify-center h-full p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark text-center">
-                          <div className="text-6xl mb-6 animate-bounce">😕</div>
-                          <h3 className="text-2xl font-bold mb-3 text-text-primary dark:text-text-primary-dark">Hmm, couldn't read that</h3>
-                          <p className="text-center mb-6 max-w-md text-text-secondary dark:text-text-secondary-dark">
-                            {activeSession.errorMessage}
-                          </p>
-                          <div className="bg-background dark:bg-background-dark rounded-lg p-6 mb-6 max-w-md w-full">
-                            <h4 className="font-bold mb-3 flex items-center gap-2 text-text-primary dark:text-text-primary-dark">
-                              <span>💡</span>
-                              <span>Tips for better results:</span>
-                            </h4>
-                            <ul className="text-sm space-y-2 text-left text-text-secondary dark:text-text-secondary-dark">
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500">✓</span>
-                                <span>Ensure good lighting and focus</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500">✓</span>
-                                <span>Capture the entire receipt</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500">✓</span>
-                                <span>Avoid shadows and glare</span>
-                              </li>
-                            </ul>
-                          </div>
-                          <button 
-                            onClick={() => fileInputRef.current?.click()}
-                            className="bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-2 px-6 rounded-lg transition-colors"
-                          >
-                            Try Another Receipt
-                          </button>
-                       </div>
-                    )}
-                    {activeSession.status === 'parsing' && (
-                        <div className="flex flex-col items-center justify-center h-full p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark">
-                            <svg className="animate-spin h-12 w-12 text-primary dark:text-primary-dark mb-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <h3 className="text-xl font-semibold mb-2 text-text-primary dark:text-text-primary-dark">Reading your receipt...</h3>
-                            <p className="text-text-secondary dark:text-text-secondary-dark mb-6 text-center max-w-md">
-                                {loadingTips[currentTipIndex]}
-                            </p>
-                            <div className="flex gap-2">
-                                <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse"></div>
-                                <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse [animation-delay:0.2s]"></div>
-                                <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse [animation-delay:0.4s]"></div>
-                            </div>
-                        </div>
-                    )}
-                    {activeSession.parsedReceipt && (
-                        <ReceiptDisplay
-                            receipt={activeSession.parsedReceipt}
-                            assignments={activeSession.assignments}
-                            people={activeSession.people}
-                            receiptImage={activeSession.receiptImage}
-                            isUndoable={activeSession.assignmentsHistory.length > 0}
-                            onUpdateAssignment={handleDirectAssignment}
-                            onAssignAllUnassigned={handleAssignAllUnassigned}
-                            onSplitAllEqually={handleSplitAllEqually}
-                            onUndoLastAssignment={handleUndoLastAssignment}
-                            isInteractive={activeSession.status === 'ready'}
-                        />
-                    )}
+              <>
+                {/* Desktop Layout */}
+                <div className="hidden lg:flex flex-row gap-4 h-full">
+                    <div className="w-1/2 h-full">
+                        {receiptContent}
+                    </div>
+                    <div className="w-1/2 h-full">
+                        {chatContent}
+                    </div>
                 </div>
-                <div className="w-full lg:w-1/2 h-full min-h-[500px]">
-                    <ChatInterface
-                        messages={activeSession.chatHistory}
-                        summary={currentBillSummary}
-                        activeSession={activeSession}
-                        onSendMessage={handleSendMessage}
-                        onSetPeople={handleSetPeople}
-                        onEditPersonName={handleEditPersonName}
-                        onClearChat={handleClearChat}
-                    />
+
+                {/* Mobile Layout */}
+                <div className="block lg:hidden h-full">
+                    {activeTab === 'receipt' && <div className="h-full">{receiptContent}</div>}
+                    {activeTab === 'chat' && <div className="h-full">{chatContent}</div>}
                 </div>
-              </div>
+              </>
             ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark">
                     <div className="text-6xl mb-6">📄✨</div>
@@ -658,8 +703,14 @@ const App: React.FC = () => {
             onClose={() => setCameraOpen(false)}
         />
       )}
+      {activeSession && (
+        <BottomNavBar 
+          activeTab={activeTab} 
+          onTabChange={handleTabChange} 
+          hasNewMessage={hasNewMessage} 
+        />
+      )}
     </div>
   );
 };
-// Fix: Add default export for App component
 export default App;
