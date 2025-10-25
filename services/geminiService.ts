@@ -68,7 +68,10 @@ export async function parseReceipt(imageBase64: string, mimeType: string): Promi
   };
 
   const textPart = {
-    text: `Analyze this receipt. Extract all line items with their quantity and price. Also extract the subtotal, tax, and tip. Generate a unique ID for each item. Format the output as JSON. If any values are missing, estimate them or use 0.`
+    text: `You are a receipt parsing expert. Your primary task is to determine if the given image is a receipt.
+- If the image is clearly a receipt, analyze it. Extract all line items with their quantity and price, the subtotal, tax, and tip.
+- If the image is NOT a receipt, or is completely unreadable, you MUST respond with a JSON object where the "items" array is empty.
+Generate a unique ID for each item on valid receipts. Format the output as JSON according to the schema. If any values are missing on a valid receipt, use 0.`
   };
 
   const response = await ai.models.generateContent({
@@ -91,9 +94,9 @@ export async function parseReceipt(imageBase64: string, mimeType: string): Promi
       throw new Error("The AI returned an invalid structure. The 'items' array is missing.");
     }
     
-    // 2. Check if any items were found
+    // 2. Check if any items were found. If not, it's likely not a receipt or is unreadable.
     if (parsedData.items.length === 0) {
-      throw new Error("I couldn't find any items on this receipt. Please try again with a clearer, well-lit photo that captures the entire receipt.");
+      throw new Error("This doesn't look like a receipt, or it's too blurry to read. Please upload a clear picture of a receipt.");
     }
 
     // 3. Sanitize and validate each item
