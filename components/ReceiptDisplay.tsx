@@ -167,6 +167,7 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
   const [isZoomModalOpen, setZoomModalOpen] = useState(false);
   const [selectedPersonForAssignAll, setSelectedPersonForAssignAll] = useState<string>('');
   const [filterQuery, setFilterQuery] = useState('');
+  const [isItemListVisible, setIsItemListVisible] = useState(true);
   
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -208,7 +209,20 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
         <div className="bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark h-full flex flex-col">
           <div className="p-4 border-b border-border dark:border-border-dark space-y-3">
             <div className="flex justify-between items-start gap-2">
-              <h2 className="text-2xl font-bold text-text-primary dark:text-text-primary-dark">Receipt Details</h2>
+               <div
+                  className="flex items-center gap-2 cursor-pointer group"
+                  onClick={() => setIsItemListVisible(!isItemListVisible)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setIsItemListVisible(!isItemListVisible)}
+                  aria-expanded={isItemListVisible}
+                  aria-controls="receipt-item-list"
+                >
+                  <h2 className="text-2xl font-bold text-text-primary dark:text-text-primary-dark">Receipt Details</h2>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-6 h-6 text-text-secondary dark:text-text-secondary-dark transition-transform transform group-hover:text-text-primary dark:group-hover:text-text-primary-dark ${isItemListVisible ? 'rotate-180' : ''}`}>
+                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </div>
               <div className="flex items-center gap-2 flex-wrap justify-end flex-shrink-0">
                   {isInteractive && (
                       <button 
@@ -262,27 +276,31 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
                 </div>
             </div>
           </div>
-          <div className="flex-grow overflow-y-auto p-4 space-y-3">
-            {filteredItems.map((item) => (
-              <ReceiptItemView
-                key={item.id}
-                item={item}
-                assignments={assignments}
-                people={people}
-                isInteractive={isInteractive}
-                editingItemId={editingItemId}
-                onEditClick={setEditingItemId}
-                onUpdateAssignment={handleUpdateAssignment}
-                onCancelEdit={handleCancelEdit}
-                onZoomRequest={() => setZoomModalOpen(true)}
-              />
-            ))}
-            {filteredItems.length === 0 && (
-                <div className="text-center text-text-secondary dark:text-text-secondary-dark py-8">
-                    <p>No items match your filter.</p>
+           <div id="receipt-item-list" className={`grid transition-all duration-300 ease-in-out ${isItemListVisible ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'} flex-grow min-h-0`}>
+                <div className="overflow-y-auto">
+                    <div className="p-4 space-y-3">
+                        {filteredItems.map((item) => (
+                          <ReceiptItemView
+                            key={item.id}
+                            item={item}
+                            assignments={assignments}
+                            people={people}
+                            isInteractive={isInteractive}
+                            editingItemId={editingItemId}
+                            onEditClick={setEditingItemId}
+                            onUpdateAssignment={handleUpdateAssignment}
+                            onCancelEdit={handleCancelEdit}
+                            onZoomRequest={() => setZoomModalOpen(true)}
+                          />
+                        ))}
+                        {filteredItems.length === 0 && (
+                            <div className="text-center text-text-secondary dark:text-text-secondary-dark py-8">
+                                <p>No items match your filter.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
-            )}
-          </div>
+           </div>
           <div className="p-4 border-t border-border dark:border-border-dark bg-background/50 dark:bg-background-dark/50 rounded-b-lg mt-auto flex-shrink-0">
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">

@@ -76,10 +76,56 @@ export async function parseReceipt(imageBase64: string, mimeType: string): Promi
 
   try {
     const jsonString = response.text.trim();
-    return JSON.parse(jsonString) as ParsedReceipt;
+    let parsedData = JSON.parse(jsonString) as ParsedReceipt;
+
+    // --- Start of validation and sanitization ---
+
+    // 1. Check if essential parts exist
+    if (!parsedData || !Array.isArray(parsedData.items)) {
+      throw new Error("The AI returned an invalid structure. The 'items' array is missing.");
+    }
+    
+    // 2. Check if any items were found
+    if (parsedData.items.length === 0) {
+      throw new Error("I couldn't find any items on this receipt. Please try again with a clearer, well-lit photo that captures the entire receipt.");
+    }
+
+    // 3. Sanitize and validate each item
+    const itemIds = new Set<string>();
+    parsedData.items = parsedData.items.map((item: any, index: number) => {
+      // Ensure required fields exist and have correct types
+      const sanitizedItem: ReceiptItem = {
+        id: String(item.id || `item-${index + 1}-${Date.now()}`),
+        name: String(item.name || 'Unnamed Item'),
+        quantity: Math.max(1, Number(item.quantity || 1)), // Default to 1, ensure it's a number
+        price: Number(item.price || 0), // Default to 0, ensure it's a number
+      };
+
+      // Ensure ID is unique
+      if (itemIds.has(sanitizedItem.id)) {
+        sanitizedItem.id = `${sanitizedItem.id}-${index}`;
+      }
+      itemIds.add(sanitizedItem.id);
+
+      return sanitizedItem;
+    });
+
+    // 4. Sanitize top-level numeric fields
+    parsedData.subtotal = Number(parsedData.subtotal || 0);
+    parsedData.tax = Number(parsedData.tax || 0);
+    parsedData.tip = Number(parsedData.tip || 0);
+
+    // --- End of validation and sanitization ---
+
+    return parsedData;
   } catch (e) {
-    console.error("Failed to parse receipt JSON:", e);
-    throw new Error("The AI failed to return a valid receipt structure. Please try a clearer image.");
+    console.error("Failed to parse or validate receipt JSON:", e, "Raw response:", response.text);
+    if (e instanceof Error) {
+        // Re-throw the specific, user-friendly error message
+        throw new Error(e.message);
+    }
+    // Fallback error
+    throw new Error("The AI could not read the receipt. Please try again with a clearer image.");
   }
 }
 

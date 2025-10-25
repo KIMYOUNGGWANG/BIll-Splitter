@@ -110,8 +110,8 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSession
             aria-hidden="true"
         ></div>
         <aside className={`fixed lg:static top-0 left-0 h-full w-64 bg-primary dark:bg-surface-dark text-on-primary dark:text-text-primary-dark p-4 flex flex-col shadow-lg z-40 transition-transform transform ${isVisible ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-          <h2 className="text-xl font-bold mb-4 border-b border-white/20 dark:border-border-dark pb-2">Receipts</h2>
-          <div className="flex-grow overflow-y-auto space-y-2 pr-1">
+          <h2 className="text-xl font-bold mb-4 border-b border-white/20 dark:border-border-dark pb-2 flex-shrink-0">Receipts</h2>
+          <div className="flex-grow min-h-0 overflow-y-auto space-y-2 pr-1">
             {sessions.length > 0 ? (
               sessions.map(session => (
                 <SessionItem
@@ -129,7 +129,7 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSession
               </div>
             )}
           </div>
-          <div className="mt-4 pt-4 border-t border-white/20 dark:border-border-dark">
+          <div className="mt-4 pt-4 border-t border-white/20 dark:border-border-dark flex-shrink-0">
             <input
               type="file"
               ref={fileInputRef}
