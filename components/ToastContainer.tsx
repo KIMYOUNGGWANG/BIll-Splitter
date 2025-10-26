@@ -14,7 +14,12 @@ const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, removeToast }) 
   if (!toastRoot) return null;
 
   return ReactDOM.createPortal(
-    <div className="fixed top-4 right-4 z-[100] space-y-2 w-full max-w-md">
+    <div
+      className="fixed top-4 right-4 z-[100] space-y-2 w-full max-w-md"
+      role="region"
+      aria-live="polite"
+      aria-label="Notifications"
+    >
       {toasts.map(toast => (
         <Toast key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
       ))}

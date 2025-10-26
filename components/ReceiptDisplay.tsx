@@ -5,6 +5,7 @@ import ConfirmationModal from './ConfirmationModal';
 import ImageZoomModal from './ImageZoomModal';
 import EditableField from './EditableField';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 const SWIPE_THRESHOLD = 60; // Pixels
 const SWIPE_MAX_TRANSLATE = 140; // Total width of action buttons
@@ -37,12 +38,9 @@ const SwipeableReceiptItem: React.FC<SwipeableReceiptItemProps> = ({ children, o
     } else {
       resetSwipe();
     }
-
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
-  }, [isInteractive, translateX, resetSwipe]);
+  }, [translateX, resetSwipe]);
   
-  const handleMouseMove = useCallback((e: MouseEvent) => {
+  const handleMouseMove = useCallback((e: globalThis.MouseEvent) => {
     if (!isDragging.current || !isInteractive) return;
     const currentX = e.clientX;
     const deltaX = currentX - startX.current;
@@ -53,8 +51,19 @@ const SwipeableReceiptItem: React.FC<SwipeableReceiptItemProps> = ({ children, o
   }, [isInteractive]);
 
   const handleMouseUp = useCallback(() => {
-      handleDragEnd();
-  }, [handleDragEnd]);
+      if (!isDragging.current) return;
+      isDragging.current = false;
+      
+      if (translateX < -SWIPE_THRESHOLD) {
+        setTranslateX(-SWIPE_MAX_TRANSLATE);
+        setIsSwiped(true);
+      } else {
+        resetSwipe();
+      }
+      
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+  }, [translateX, resetSwipe, handleMouseMove]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!isInteractive || e.button !== 0) return; // Only for left click
@@ -81,7 +90,6 @@ const SwipeableReceiptItem: React.FC<SwipeableReceiptItemProps> = ({ children, o
   };
 
   const handleTouchEnd = () => {
-    if (!isDragging.current || !isInteractive) return;
     handleDragEnd();
   };
   
@@ -104,12 +112,12 @@ const SwipeableReceiptItem: React.FC<SwipeableReceiptItemProps> = ({ children, o
             </button>
         </div>
       <div
-        className="relative z-10 touch-pan-y cursor-grab"
+        className="relative z-10 touch-pan-y"
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        style={{ transform: `translateX(${translateX}px)`, transition: isDragging.current ? 'none' : 'transform 0.2s ease-out' }}
+        style={{ transform: `translateX(${translateX}px)`, transition: isDragging.current ? 'none' : 'transform 0.2s ease-out', cursor: isInteractive ? 'grab' : 'default' }}
       >
         {children}
       </div>
@@ -187,11 +195,12 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
           <div 
             className="flex justify-between items-start gap-2"
             role="button"
-            tabIndex={0}
+            tabIndex={isInteractive ? 0 : -1}
+            onClick={onZoomRequest}
             onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onZoomRequest()}
             aria-label={`Zoom in on ${item.name}`}
           >
-            <div className="flex items-center gap-2 flex-1 min-w-0" onClick={onZoomRequest}>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
                 <div 
                     className={`w-2 h-2 rounded-full flex-shrink-0 ${isAssigned ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-500'}`}
                     title={isAssigned ? 'Assigned' : 'Unassigned'}
@@ -287,7 +296,7 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
                 onClick={handleEdit}
                 disabled={!isInteractive}
                 className={`text-left p-1 -ml-1 rounded transition-colors disabled:cursor-default ${isInteractive ? 'text-primary dark:text-primary-dark hover:bg-primary/10 dark:hover:bg-primary-dark/10 cursor-pointer' : 'text-text-secondary dark:text-text-secondary-dark'}`}
-                aria-label={`Edit assignment for ${item.name}`}
+                aria-label={`Edit assignment for ${item.name}. Currently ${getAssignedNamesText()}`}
                 aria-expanded={isEditing}
                 aria-controls={`edit-assignment-${item.id}`}
               >
@@ -335,6 +344,7 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
   const [selectedPersonForAssignAll, setSelectedPersonForAssignAll] = useState<string>('');
   const [filterQuery, setFilterQuery] = useState('');
   const [isItemListVisible, setIsItemListVisible] = useState(true);
+  const assignAllModalRef = useFocusTrap<HTMLDivElement>(isAssignAllModalOpen);
   
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -520,8 +530,18 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
         </div>
         
         {isAssignAllModalOpen && (
-            <div className="fixed inset-0 bg-black/60 dark:bg-black/80 flex items-center justify-center z-50 animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="assign-all-title">
-                <div className="bg-surface dark:bg-surface-dark rounded-lg shadow-xl p-6 w-full max-w-sm m-4">
+            <div
+              className="fixed inset-0 bg-black/60 dark:bg-black/80 flex items-center justify-center z-50 animate-fade-in"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="assign-all-title"
+              onClick={() => setIsAssignAllModalOpen(false)}
+            >
+                <div
+                    ref={assignAllModalRef}
+                    tabIndex={-1}
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-surface dark:bg-surface-dark rounded-lg shadow-xl p-6 w-full max-w-sm m-4 focus:outline-none">
                     <h3 id="assign-all-title" className="text-lg font-bold text-text-primary dark:text-text-primary-dark mb-4">Assign All Unassigned Items</h3>
                     <p className="text-sm text-text-secondary dark:text-text-secondary-dark mb-4">Select a person to assign all remaining unassigned items to.</p>
                     <fieldset>

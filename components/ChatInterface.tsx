@@ -316,7 +316,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
               )}
           </div>
           
-          <div className="flex-grow overflow-y-auto mb-4 pr-2 space-y-4">
+          <div
+            className="flex-grow overflow-y-auto mb-4 pr-2 space-y-4"
+            role="log"
+            aria-live="polite"
+          >
             {messages.map((msg, index) => {
                if (msg.sender === 'system') {
                     return (

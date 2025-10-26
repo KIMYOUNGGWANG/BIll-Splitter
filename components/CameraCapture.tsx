@@ -1,4 +1,6 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface CameraCaptureProps {
   onCapture: (blob: Blob) => void;
@@ -11,6 +13,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose }) => 
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const containerRef = useFocusTrap<HTMLDivElement>(true);
 
   const startCamera = useCallback(async () => {
     try {
@@ -93,7 +96,13 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose }) => 
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center animate-fade-in" role="dialog" aria-modal="true">
+    <div
+      ref={containerRef}
+      tabIndex={-1}
+      className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center animate-fade-in focus:outline-none"
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="relative w-full h-full max-w-4xl max-h-[90vh] flex items-center justify-center">
         {error ? (
           <div className="text-white text-center p-8 bg-gray-800 rounded-lg">

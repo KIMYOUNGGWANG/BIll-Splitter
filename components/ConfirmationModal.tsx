@@ -1,5 +1,6 @@
 
 import React, { useEffect } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -11,22 +12,23 @@ interface ConfirmationModalProps {
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, title, message, variant = 'destructive' }) => {
+  const modalRef = useFocusTrap<HTMLDivElement>(isOpen);
+  
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
-      } else if (event.key === 'Enter') {
-        onConfirm();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    const modalElement = modalRef.current;
+    modalElement?.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      modalElement?.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose, onConfirm]);
+  }, [isOpen, onClose, modalRef]);
   
   if (!isOpen) return null;
 
@@ -37,19 +39,22 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, 
   return (
     <div
       className="fixed inset-0 bg-black/60 dark:bg-black/80 flex items-center justify-center z-50 animate-fade-in"
-      role="dialog"
+      role="alertdialog"
       aria-modal="true"
       aria-labelledby="confirmation-title"
+      aria-describedby="confirmation-message"
       onClick={onClose}
     >
       <div
-        className="bg-surface dark:bg-surface-dark rounded-lg shadow-xl p-6 w-full max-w-sm m-4"
+        ref={modalRef}
+        tabIndex={-1}
+        className="bg-surface dark:bg-surface-dark rounded-lg shadow-xl p-6 w-full max-w-sm m-4 focus:outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="confirmation-title" className="text-lg font-bold text-text-primary dark:text-text-primary-dark mb-4">
           {title}
         </h3>
-        <p className="text-sm text-text-secondary dark:text-text-secondary-dark mb-6">
+        <p id="confirmation-message" className="text-sm text-text-secondary dark:text-text-secondary-dark mb-6">
           {message}
         </p>
         <div className="flex justify-end gap-2">

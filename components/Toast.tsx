@@ -56,7 +56,10 @@ const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
     : 'animate-[fade-in-right_0.3s_ease-out_forwards]';
 
   return (
-    <div className={`flex items-start w-full p-4 rounded-lg shadow-lg text-sm backdrop-blur-sm ${styles.bg} ${styles.text} ${animationClass}`}>
+    <div
+      role={type === 'error' ? 'alert' : 'status'}
+      className={`flex items-start w-full p-4 rounded-lg shadow-lg text-sm backdrop-blur-sm ${styles.bg} ${styles.text} ${animationClass}`}
+    >
       <div className={`flex-shrink-0 mr-3 ${styles.icon}`}>
         {ICONS[type]}
       </div>

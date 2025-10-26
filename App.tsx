@@ -688,7 +688,7 @@ const App: React.FC = () => {
   
 
   return (
-    <div className="h-screen bg-background dark:bg-background-dark font-sans flex flex-col">
+    <div className="h-full bg-background dark:bg-background-dark font-sans flex flex-col">
       <header className="bg-primary dark:bg-surface-dark shadow-md z-20 flex-shrink-0">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-4">

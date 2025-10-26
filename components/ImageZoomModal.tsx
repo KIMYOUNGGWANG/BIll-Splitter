@@ -1,4 +1,6 @@
+
 import React, { useEffect } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface ImageZoomModalProps {
   isOpen: boolean;
@@ -7,6 +9,8 @@ interface ImageZoomModalProps {
 }
 
 const ImageZoomModal: React.FC<ImageZoomModalProps> = ({ isOpen, onClose, imageUrl }) => {
+  const modalRef = useFocusTrap<HTMLDivElement>(isOpen);
+  
   useEffect(() => {
     if (!isOpen) return;
 
@@ -26,7 +30,9 @@ const ImageZoomModal: React.FC<ImageZoomModalProps> = ({ isOpen, onClose, imageU
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fade-in"
+      ref={modalRef}
+      tabIndex={-1}
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fade-in focus:outline-none"
       role="dialog"
       aria-modal="true"
       aria-label="Zoomed Receipt Image"

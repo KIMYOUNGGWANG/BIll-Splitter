@@ -1,7 +1,8 @@
 
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import type { ReceiptSession } from '../types';
 import ConfirmationModal from './ConfirmationModal';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface SessionSidebarProps {
   sessions: ReceiptSession[];
@@ -69,7 +70,7 @@ const SessionItem: React.FC<{ session: ReceiptSession; isActive: boolean; onSwit
           
             <button
                 onClick={handleDeleteClick}
-                className={`p-1 rounded-full hover:bg-white/20 transition-opacity flex-shrink-0 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+                className={`p-1 rounded-full hover:bg-white/20 transition-opacity flex-shrink-0 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
                 aria-label={`Delete ${session.name}`}
             >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
@@ -90,6 +91,7 @@ const SessionItem: React.FC<{ session: ReceiptSession; isActive: boolean; onSwit
 
 
 const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSessionId, isVisible, onAddReceipts, onSwitchSession, onDeleteSession, onOpenCamera, onClose, fileInputRef }) => {
+  const sidebarRef = useFocusTrap<HTMLDivElement>(isVisible);
 
   const handleAddClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -102,6 +104,19 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSession
     }
     onClose();
   }, [onAddReceipts, onClose]);
+  
+  useEffect(() => {
+    if (!isVisible) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    const sidebarEl = sidebarRef.current;
+    sidebarEl?.addEventListener('keydown', handleKeyDown);
+    return () => sidebarEl?.removeEventListener('keydown', handleKeyDown);
+  }, [isVisible, onClose, sidebarRef]);
+
 
   return (
     <>
@@ -110,7 +125,12 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSession
             onClick={onClose}
             aria-hidden="true"
         ></div>
-        <aside className={`fixed lg:static top-0 left-0 h-full w-64 bg-primary dark:bg-surface-dark text-on-primary dark:text-text-primary-dark p-4 flex flex-col shadow-lg z-40 transition-transform transform ${isVisible ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+        <aside
+            ref={sidebarRef}
+            tabIndex={-1}
+            role="complementary"
+            aria-label="Receipts management sidebar"
+            className={`fixed lg:static top-0 left-0 h-full w-64 bg-primary dark:bg-surface-dark text-on-primary dark:text-text-primary-dark p-4 flex flex-col shadow-lg z-40 transition-transform transform focus:outline-none ${isVisible ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
           <h2 className="text-xl font-bold mb-4 border-b border-white/20 dark:border-border-dark pb-2 flex-shrink-0">Receipts</h2>
           <div className="flex-grow min-h-0 overflow-y-auto pr-1">
             <div className="space-y-2">
