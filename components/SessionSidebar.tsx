@@ -111,54 +111,56 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({ sessions, activeSession
         ></div>
         <aside className={`fixed lg:static top-0 left-0 h-full w-64 bg-primary dark:bg-surface-dark text-on-primary dark:text-text-primary-dark p-4 flex flex-col shadow-lg z-40 transition-transform transform ${isVisible ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
           <h2 className="text-xl font-bold mb-4 border-b border-white/20 dark:border-border-dark pb-2 flex-shrink-0">Receipts</h2>
-          <div className="flex-grow min-h-0 overflow-y-auto space-y-2 pr-1">
-            {sessions.length > 0 ? (
-              sessions.map(session => (
-                <SessionItem
-                  key={session.id}
-                  session={session}
-                  isActive={session.id === activeSessionId}
-                  onSwitch={() => onSwitchSession(session.id)}
-                  onDelete={() => onDeleteSession(session.id)}
-                />
-              ))
-            ) : (
-              <div className="text-center text-sm text-white/70 dark:text-text-secondary-dark py-4">
-                <p>No receipts yet.</p>
-                <p>Add one to start!</p>
-              </div>
-            )}
-          </div>
-          <div className="mt-4 pt-4 border-t border-white/20 dark:border-border-dark flex-shrink-0">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              multiple
-              accept="image/*"
-              className="hidden"
-              aria-hidden="true"
-            />
+          <div className="flex-grow min-h-0 overflow-y-auto pr-1">
             <div className="space-y-2">
-                <button
-                  onClick={handleAddClick}
-                  className="w-full bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-                  </svg>
-                  Add Receipt(s)
-                </button>
-                <button
-                  onClick={onOpenCamera}
-                  className="w-full bg-primary-focus/80 dark:bg-primary-dark/30 hover:bg-primary-focus dark:hover:bg-primary-dark/50 text-on-primary dark:text-text-primary-dark font-bold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                    <path d="M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.165a.75.75 0 0 1-.54-.22l-.935-.935a.75.75 0 0 0-1.06 0l-.935.935a.75.75 0 0 1-.54.22H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Z" />
-                    <path d="M10 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM8.25 10a1.75 1.75 0 1 1 3.5 0 1.75 1.75 0 0 1-3.5 0Z" />
-                  </svg>
-                  Use Camera
-                </button>
+              {sessions.length > 0 ? (
+                sessions.map(session => (
+                  <SessionItem
+                    key={session.id}
+                    session={session}
+                    isActive={session.id === activeSessionId}
+                    onSwitch={() => onSwitchSession(session.id)}
+                    onDelete={() => onDeleteSession(session.id)}
+                  />
+                ))
+              ) : (
+                <div className="text-center text-sm text-white/70 dark:text-text-secondary-dark py-4">
+                  <p>No receipts yet.</p>
+                  <p>Add one to start!</p>
+                </div>
+              )}
+            </div>
+            <div className="mt-4 pt-4 border-t border-white/20 dark:border-border-dark">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                multiple
+                accept="image/*"
+                className="hidden"
+                aria-hidden="true"
+              />
+              <div className="space-y-2">
+                  <button
+                    onClick={handleAddClick}
+                    className="w-full bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                      <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                    </svg>
+                    Add Receipt(s)
+                  </button>
+                  <button
+                    onClick={onOpenCamera}
+                    className="w-full bg-primary-focus/80 dark:bg-primary-dark/30 hover:bg-primary-focus dark:hover:bg-primary-dark/50 text-on-primary dark:text-text-primary-dark font-bold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                      <path d="M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.165a.75.75 0 0 1-.54-.22l-.935-.935a.75.75 0 0 0-1.06 0l-.935.935a.75.75 0 0 1-.54.22H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Z" />
+                      <path d="M10 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM8.25 10a1.75 1.75 0 1 1 3.5 0 1.75 1.75 0 0 1-3.5 0Z" />
+                    </svg>
+                    Use Camera
+                  </button>
+              </div>
             </div>
           </div>
         </aside>
