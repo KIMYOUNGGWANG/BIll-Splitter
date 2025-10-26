@@ -85,6 +85,12 @@ function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case 'GO_HOME':
+        return {
+            ...state,
+            activeSessionId: null,
+        };
+
     case 'RESET_APP':
         localStorage.removeItem(LOCAL_STORAGE_KEY);
         return initialState;
@@ -500,6 +506,10 @@ const App: React.FC = () => {
   }, []);
 
   const handleDeleteSession = useCallback((sessionId: string) => dispatch({ type: 'DELETE_SESSION', payload: sessionId }), []);
+  
+  const handleGoHome = useCallback(() => {
+    dispatch({ type: 'GO_HOME' });
+  }, []);
 
   const handleSetPeople = useCallback((namesInput: string) => {
     if (!activeSession) return;
@@ -691,10 +701,12 @@ const App: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                 </svg>
             </button>
-            <h1 className="text-2xl font-bold text-on-primary dark:text-text-primary-dark">
-              Splitly
-              <span className="text-secondary dark:text-secondary-dark font-semibold ml-1">AI</span>
-            </h1>
+            <button onClick={handleGoHome} className="focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-primary-dark focus:ring-white rounded-md" aria-label="Go to home screen">
+                <h1 className="text-2xl font-bold text-on-primary dark:text-text-primary-dark">
+                  Splitly
+                  <span className="text-secondary dark:text-secondary-dark font-semibold ml-1">AI</span>
+                </h1>
+            </button>
           </div>
           <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-full text-on-primary dark:text-text-primary-dark hover:bg-white/10 dark:hover:bg-primary-dark/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-primary-dark focus:ring-white" aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
               {theme === 'light' ? (
