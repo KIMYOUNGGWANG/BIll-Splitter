@@ -1,9 +1,122 @@
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, TouchEvent } from 'react';
 import { ParsedReceipt, Assignments, ReceiptItem } from '../types';
 import ConfirmationModal from './ConfirmationModal';
 import ImageZoomModal from './ImageZoomModal';
 import EditableField from './EditableField';
+import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
+
+const SWIPE_THRESHOLD = 60; // Pixels
+const SWIPE_MAX_TRANSLATE = 140; // Total width of action buttons
+
+interface SwipeableReceiptItemProps {
+  children: React.ReactNode;
+  onSplit: () => void;
+  onClear: () => void;
+  isInteractive: boolean;
+}
+
+const SwipeableReceiptItem: React.FC<SwipeableReceiptItemProps> = ({ children, onSplit, onClear, isInteractive }) => {
+  const [translateX, setTranslateX] = useState(0);
+  const [isSwiped, setIsSwiped] = useState(false);
+  const startX = useRef(0);
+  const isDragging = useRef(false);
+
+  const resetSwipe = useCallback(() => {
+    setTranslateX(0);
+    setIsSwiped(false);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+
+    if (translateX < -SWIPE_THRESHOLD) {
+      setTranslateX(-SWIPE_MAX_TRANSLATE);
+      setIsSwiped(true);
+    } else {
+      resetSwipe();
+    }
+
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
+  }, [isInteractive, translateX, resetSwipe]);
+  
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging.current || !isInteractive) return;
+    const currentX = e.clientX;
+    const deltaX = currentX - startX.current;
+    
+    if (deltaX < 0) { // Only allow left swipe
+        setTranslateX(Math.max(deltaX, -SWIPE_MAX_TRANSLATE - 20)); // Allow some overdrag
+    }
+  }, [isInteractive]);
+
+  const handleMouseUp = useCallback(() => {
+      handleDragEnd();
+  }, [handleDragEnd]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!isInteractive || e.button !== 0) return; // Only for left click
+    startX.current = e.clientX;
+    isDragging.current = true;
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleTouchStart = (e: TouchEvent) => {
+    if (!isInteractive) return;
+    startX.current = e.touches[0].clientX;
+    isDragging.current = true;
+  };
+
+  const handleTouchMove = (e: TouchEvent) => {
+    if (!isDragging.current || !isInteractive) return;
+    const currentX = e.touches[0].clientX;
+    const deltaX = currentX - startX.current;
+    
+    if (deltaX < 0) { // Only allow left swipe
+        setTranslateX(Math.max(deltaX, -SWIPE_MAX_TRANSLATE - 20)); // Allow some overdrag
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDragging.current || !isInteractive) return;
+    handleDragEnd();
+  };
+  
+  const handleAction = (action: 'split' | 'clear') => {
+      if (action === 'split') onSplit();
+      if (action === 'clear') onClear();
+      resetSwipe();
+  }
+
+  return (
+    <div className="relative overflow-hidden rounded-md">
+        <div className="absolute top-0 right-0 h-full flex items-center z-0">
+            <button onClick={() => handleAction('split')} className="h-full px-4 bg-blue-500 text-white flex flex-col items-center justify-center transition-colors hover:bg-blue-600">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M7.25 2a.75.75 0 0 0-1.5 0v1.559a2.25 2.25 0 0 0-1.22.453L3.155 3.155a.75.75 0 0 0-1.06 1.06l.858.858A2.25 2.25 0 0 0 2 6.293V4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .75.75h3.5a.75.75 0 0 0 0-1.5H3.207a2.249 2.249 0 0 0 1.22-.453l.858.858a.75.75 0 0 0 1.06-1.06l-.858-.858A2.25 2.25 0 0 0 6.293 5H7.85a.75.75 0 0 0 0-1.5H6.293A2.249 2.249 0 0 0 5 3.207V2.75a.75.75 0 0 0 1.5 0V4.31a2.25 2.25 0 0 0 .453 1.22l.858.858a.75.75 0 0 0 1.06-1.06l-.858-.858A2.25 2.25 0 0 0 7.25 3.207V2ZM8.75 8a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 0 1.5H9.793a2.249 2.249 0 0 1-1.22.453l-.858-.858a.75.75 0 0 1-1.06 1.06l.858.858A2.25 2.25 0 0 1 8.146 11h-1.56a.75.75 0 0 1 0-1.5h1.56a2.249 2.249 0 0 1 1.22-.453l.858-.858a.75.75 0 0 1 1.06-1.06l-.858.858A2.25 2.25 0 0 1 9.707 9H11.25a.75.75 0 0 1 .75.75v1.559a2.25 2.25 0 0 1 1.22-.453l1.375.858a.75.75 0 0 1-.53 1.408l-1.375-.858a2.25 2.25 0 0 1-1.22.453V13.25a.75.75 0 0 1-1.5 0v-1.56a2.25 2.25 0 0 1-.453-1.22l-.858-.858a.75.75 0 0 1 1.06-1.06l.858.858A2.25 2.25 0 0 1 11.25 8h.75Z" /></svg>
+                <span className="text-xs mt-1">Split</span>
+            </button>
+            <button onClick={() => handleAction('clear')} className="h-full px-4 bg-red-500 text-white flex flex-col items-center justify-center transition-colors hover:bg-red-600">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M5.75 3a.75.75 0 0 0-1.5 0v1.5H2.5a.75.75 0 0 0 0 1.5h1.75v1.5a.75.75 0 0 0 1.5 0v-1.5h1.5a.75.75 0 0 0 0-1.5h-1.5V3Zm4.5 0a.75.75 0 0 0-1.5 0v1.5H7a.75.75 0 0 0 0 1.5h1.75v1.5a.75.75 0 0 0 1.5 0v-1.5h1.5a.75.75 0 0 0 0-1.5h-1.5V3Z" clipRule="evenodd" /><path d="M2 10a2 2 0 0 0-2 2v.25a.75.75 0 0 0 1.5 0V12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 .5.5v.25a.75.75 0 0 0 1.5 0V12a2 2 0 0 0-2-2H2Z" /></svg>
+                <span className="text-xs mt-1">Clear</span>
+            </button>
+        </div>
+      <div
+        className="relative z-10 touch-pan-y cursor-grab"
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{ transform: `translateX(${translateX}px)`, transition: isDragging.current ? 'none' : 'transform 0.2s ease-out' }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
 
 interface ReceiptItemViewProps {
   item: ReceiptItem;
@@ -16,6 +129,8 @@ interface ReceiptItemViewProps {
   onCancelEdit: () => void;
   onZoomRequest: () => void;
   onEditItem: (itemId: string, newName: string, newPrice: number) => void;
+  onSplitItem: (itemId: string) => void;
+  onClearItem: (itemId: string) => void;
 }
 
 const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
@@ -28,7 +143,9 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
   onUpdateAssignment,
   onCancelEdit,
   onZoomRequest,
-  onEditItem
+  onEditItem,
+  onSplitItem,
+  onClearItem,
 }) => {
   const [selectedNames, setSelectedNames] = useState<string[]>([]);
   const [isUnassignConfirmOpen, setIsUnassignConfirmOpen] = useState(false);
@@ -65,7 +182,8 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
   
   return (
     <>
-        <div className={`p-3 rounded-md border border-border dark:border-border-dark transition-colors ${isEditing ? 'bg-primary/5 dark:bg-primary-dark/10 ring-2 ring-primary dark:ring-primary-dark' : 'bg-background dark:bg-background-dark'}`}>
+      <SwipeableReceiptItem onSplit={() => onSplitItem(item.id)} onClear={() => onClearItem(item.id)} isInteractive={isInteractive && !isEditing}>
+        <div className={`p-3 border border-border dark:border-border-dark transition-all duration-300 bg-surface dark:bg-surface-dark ${isEditing ? 'bg-primary/5 dark:bg-primary-dark/10 ring-2 ring-primary dark:ring-primary-dark rounded-md' : ''} ${isAssigned && !isEditing ? 'opacity-70' : ''}`}>
           <div 
             className="flex justify-between items-start gap-2"
             role="button"
@@ -85,7 +203,20 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
                   className="font-semibold text-text-primary dark:text-text-primary-dark"
                   ariaLabel={`Edit item name for ${item.name}`}
                 />
-                {item.quantity > 1 && <span className="text-text-secondary dark:text-text-secondary-dark text-sm ml-1">(x{item.quantity})</span>}
+                {item.quantity > 1 && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-text-secondary dark:text-text-secondary-dark text-sm">(x{item.quantity})</span>
+                    {isInteractive && (
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onSplitItem(item.id); }}
+                            className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50 px-1.5 py-0.5 rounded-md hover:bg-blue-200 dark:hover:bg-blue-900"
+                            aria-label={`Split ${item.name} evenly`}
+                        >
+                            Split
+                        </button>
+                    )}
+                  </div>
+                )}
             </div>
              <EditableField
               initialValue={item.price}
@@ -165,14 +296,15 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
             </div>
           )}
         </div>
-        <ConfirmationModal
-            isOpen={isUnassignConfirmOpen}
-            onClose={() => setIsUnassignConfirmOpen(false)}
-            onConfirm={handleConfirmUnassign}
-            title="Unassign Item"
-            message={`Are you sure you want to unassign "${item.name}" from everyone?`}
-            variant="destructive"
-        />
+      </SwipeableReceiptItem>
+      <ConfirmationModal
+          isOpen={isUnassignConfirmOpen}
+          onClose={() => setIsUnassignConfirmOpen(false)}
+          onConfirm={handleConfirmUnassign}
+          title="Unassign Item"
+          message={`Are you sure you want to unassign "${item.name}" from everyone?`}
+          variant="destructive"
+      />
     </>
   );
 });
@@ -191,9 +323,11 @@ interface ReceiptDisplayProps {
   isInteractive: boolean;
   onEditItem: (itemId: string, newName: string, newPrice: number) => void;
   onEditTotals: (newSubtotal: number, newTax: number, newTip: number) => void;
+  onSplitItem: (itemId: string) => void;
+  onClearItem: (itemId: string) => void;
 }
 
-const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, people, receiptImage, isUndoable, onUpdateAssignment, onAssignAllUnassigned, onSplitAllEqually, onUndoLastAssignment, isInteractive, onEditItem, onEditTotals }) => {
+const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, people, receiptImage, isUndoable, onUpdateAssignment, onAssignAllUnassigned, onSplitAllEqually, onUndoLastAssignment, isInteractive, onEditItem, onEditTotals, onSplitItem, onClearItem }) => {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [isAssignAllModalOpen, setIsAssignAllModalOpen] = useState(false);
   const [isSplitAllModalOpen, setIsSplitAllModalOpen] = useState(false);
@@ -236,6 +370,8 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
     receipt.items.filter(item =>
       item.name.toLowerCase().includes(filterQuery.toLowerCase())
     ), [receipt.items, filterQuery]);
+    
+  const animatedTotal = useAnimatedNumber(receipt.subtotal + receipt.tax + receipt.tip, 500);
 
   return (
     <>
@@ -311,7 +447,7 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
           </div>
            <div id="receipt-item-list" className={`grid transition-all duration-300 ease-in-out ${isItemListVisible ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'} flex-grow min-h-0`}>
                 <div className="overflow-y-auto">
-                    <div className="p-4 space-y-3">
+                    <div className="p-4 space-y-2">
                         {filteredItems.map((item) => (
                           <ReceiptItemView
                             key={item.id}
@@ -325,6 +461,8 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
                             onCancelEdit={handleCancelEdit}
                             onZoomRequest={() => setZoomModalOpen(true)}
                             onEditItem={onEditItem}
+                            onSplitItem={onSplitItem}
+                            onClearItem={onClearItem}
                           />
                         ))}
                         {filteredItems.length === 0 && (
@@ -375,7 +513,7 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
               </div>
               <div className="flex justify-between font-bold text-base pt-2 border-t border-border dark:border-border-dark mt-2">
                 <span className="text-text-primary dark:text-text-primary-dark">Total</span>
-                <span className="font-mono text-primary dark:text-primary-dark">{formatCurrency(receipt.subtotal + receipt.tax + receipt.tip)}</span>
+                <span className="font-mono text-primary dark:text-primary-dark">{formatCurrency(animatedTotal)}</span>
               </div>
             </div>
           </div>

@@ -1,3 +1,4 @@
+
 import React, { useRef, useState, useCallback } from 'react';
 import type { ReceiptSession } from '../types';
 import ConfirmationModal from './ConfirmationModal';
@@ -31,7 +32,7 @@ const SessionItem: React.FC<{ session: ReceiptSession; isActive: boolean; onSwit
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-red-400">
               <path fillRule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm.75-10.25a.75.75 0 0 0-1.5 0v4.5a.75.75 0 0 0 1.5 0v-4.5Z" clipRule="evenodd" />
             </svg>
-             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs p-2 text-xs text-on-primary dark:text-text-primary-dark bg-primary dark:bg-surface-dark rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs p-2 text-xs text-on-primary dark:text-text-primary-dark bg-primary dark:bg-surface-dark rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none z-10">
                 {session.errorMessage}
             </div>
            </div>

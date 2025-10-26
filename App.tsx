@@ -1,13 +1,15 @@
-
 import React, { useReducer, useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import SessionSidebar from './components/SessionSidebar';
 import ReceiptDisplay from './components/ReceiptDisplay';
 import ChatInterface from './components/ChatInterface';
 import CameraCapture from './components/CameraCapture';
 import BottomNavBar from './components/BottomNavBar';
+import ReceiptSkeleton from './components/ReceiptSkeleton';
+import WelcomeScreen from './components/WelcomeScreen';
 import { parseReceipt, updateAssignments } from './services/geminiService';
 import { calculateBillSummary } from './utils/billCalculator';
 import { formatAssignmentMessage, formatAssignmentUpdateMessage } from './utils/messageFormatter';
+import { triggerHapticFeedback } from './utils/haptics';
 import { useToast } from './context/ToastContext';
 import type { AppState, AppAction, Assignments, ReceiptSession, ChatMessage } from './types';
 
@@ -18,6 +20,7 @@ const initialState: AppState = {
 
 const MAX_UNDO_HISTORY = 10;
 const LOCAL_STORAGE_KEY = 'splitly-ai-sessions';
+
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -120,6 +123,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     return { ...session, status: 'assigning', chatHistory: [...session.chatHistory, { sender: 'user', text: action.payload.message }] };
 
                   case 'SEND_MESSAGE_SUCCESS': {
+                    triggerHapticFeedback();
                     const { update, newPeople } = action.payload;
                     const oldAssignments = session.assignments;
                     const newAssignments = update.newAssignments;
@@ -152,6 +156,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     return { ...session, status: 'ready', chatHistory: [...session.chatHistory, { sender: 'system', text: `Error: ${action.payload.message}` }]};
                   
                   case 'DIRECT_ASSIGNMENT': {
+                    triggerHapticFeedback();
                     const { itemId, newNames } = action.payload;
                     const item = session.parsedReceipt?.items.find(i => i.id === itemId);
                     if (!item) return session;
@@ -205,6 +210,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
                   }
 
                   case 'ASSIGN_ALL_UNASSIGNED': {
+                    triggerHapticFeedback();
                     const { personName } = action.payload;
                     if (!session.parsedReceipt) return session;
 
@@ -228,6 +234,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
                   }
                   
                   case 'SPLIT_ALL_EQUALLY': {
+                    triggerHapticFeedback();
                     if (!session.parsedReceipt || session.people.length === 0) return session;
 
                     const newAssignments: Assignments = {};
@@ -244,6 +251,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
                       if (session.assignmentsHistory.length === 0) {
                           return session;
                       }
+                      triggerHapticFeedback();
                       const newHistory = [...session.assignmentsHistory];
                       const lastState = newHistory.pop();
                       return {
@@ -258,6 +266,30 @@ function appReducer(state: AppState, action: AppAction): AppState {
                       return { ...session, chatHistory: [{ sender: 'system', text: 'Chat history cleared.'}] };
                   }
 
+                   case 'SPLIT_ITEM_EVENLY': {
+                    const { itemId } = action.payload;
+                    const item = session.parsedReceipt?.items.find(i => i.id === itemId);
+                    if (!item || session.people.length === 0) return session;
+
+                    triggerHapticFeedback();
+                    const message = `${item.name} has been split evenly among everyone.`;
+                    const newAssignments = { ...session.assignments, [itemId]: session.people };
+                    const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
+                    return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+                  }
+
+                  case 'CLEAR_ITEM_ASSIGNMENT': {
+                    const { itemId } = action.payload;
+                    const item = session.parsedReceipt?.items.find(i => i.id === itemId);
+                    if (!item) return session;
+
+                    triggerHapticFeedback();
+                    const message = `${item.name} has been unassigned.`;
+                    const newAssignments = { ...session.assignments, [itemId]: [] };
+                    const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
+                    return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+                  }
+
                   default:
                     return session;
                 }
@@ -267,14 +299,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
-const loadingTips = [
-  "Pro tip: You can say 'split this evenly' for shared items.",
-  "Use Ctrl+Z or Cmd+Z to undo your last assignment.",
-  "You can click on any item's name to edit its price.",
-  "Tax and tip are automatically divided proportionally.",
-  "Use the sidebar to manage multiple receipts at once.",
-];
-
 
 const App: React.FC = () => {
   const [state, dispatch] = useReducer(appReducer, initialState);
@@ -282,7 +306,6 @@ const App: React.FC = () => {
   const activeSession = sessions.find(s => s.id === activeSessionId) || null;
   const { addToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [currentTipIndex, setCurrentTipIndex] = useState(0);
   const [isCameraOpen, setCameraOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'receipt' | 'chat'>('receipt');
   const [hasNewMessage, setHasNewMessage] = useState(false);
@@ -326,6 +349,7 @@ const App: React.FC = () => {
     }
   }, [state]);
 
+  // Handle theme changes
   useEffect(() => {
     const root = window.document.documentElement;
     const isDark = theme === 'dark';
@@ -333,6 +357,7 @@ const App: React.FC = () => {
     localStorage.setItem('theme', theme);
   }, [theme]);
   
+  // Handle body scroll lock for modals/sidebar
   useEffect(() => {
     if (isSidebarVisible) {
       document.body.classList.add('modal-open');
@@ -343,16 +368,6 @@ const App: React.FC = () => {
       document.body.classList.remove('modal-open');
     }
   }, [isSidebarVisible]);
-  
-  useEffect(() => {
-    let tipInterval: number;
-    if (activeSession?.status === 'parsing') {
-        tipInterval = window.setInterval(() => {
-            setCurrentTipIndex(prevIndex => (prevIndex + 1) % loadingTips.length);
-        }, 3000);
-    }
-    return () => clearInterval(tipInterval);
-  }, [activeSession?.status]);
   
   // Effect to show notification dot for new messages on mobile
   useEffect(() => {
@@ -385,31 +400,19 @@ const App: React.FC = () => {
     [activeSession?.parsedReceipt, activeSession?.assignments, activeSession?.people]
   );
 
-  const SUPPORTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
-
   const fileToBase64 = (file: File): Promise<[string, string]> => {
     return new Promise((resolve, reject) => {
-      if (SUPPORTED_MIME_TYPES.includes(file.type)) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          const base64 = result.split(',')[1];
-          resolve([base64, file.type]);
-        };
-        reader.onerror = error => reject(error);
-        reader.readAsDataURL(file);
-      } else {
-        // For unsupported types, try to convert via canvas
         const objectUrl = URL.createObjectURL(file);
         const img = new Image();
         img.onload = () => {
           try {
             const canvas = document.createElement('canvas');
-            // Resize image for performance
-            const MAX_WIDTH = 1920;
-            let width = img.width;
-            let height = img.height;
+            const MAX_WIDTH = 1920; // Max width for the compressed image, good balance of quality and size
+            const QUALITY = 0.9; // JPEG quality
 
+            let { width, height } = img;
+
+            // Resize if the image is too large, maintaining aspect ratio
             if (width > MAX_WIDTH) {
               height = (MAX_WIDTH / width) * height;
               width = MAX_WIDTH;
@@ -418,25 +421,30 @@ const App: React.FC = () => {
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext('2d');
+
             if (!ctx) {
-              return reject(new Error('Failed to get canvas context for image conversion.'));
+              return reject(new Error('Failed to get canvas context for image compression.'));
             }
+
             ctx.drawImage(img, 0, 0, width, height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+            
+            // Get the compressed image data URL as a JPEG
+            const dataUrl = canvas.toDataURL('image/jpeg', QUALITY);
             const base64 = dataUrl.split(',')[1];
+            
             resolve([base64, 'image/jpeg']);
           } catch (e) {
-            reject(e);
+              reject(e);
           } finally {
+             // Clean up the object URL to avoid memory leaks
              URL.revokeObjectURL(objectUrl);
           }
         };
         img.onerror = () => {
           URL.revokeObjectURL(objectUrl);
-          reject(new Error(`The file type (${file.type}) is not supported and could not be converted. Please try a standard image format like JPEG or PNG.`));
+          reject(new Error("Failed to load image for compression. The file might be corrupt or an unsupported format. Please try a standard image format like JPEG or PNG."));
         };
         img.src = objectUrl;
-      }
     });
   };
 
@@ -487,7 +495,7 @@ const App: React.FC = () => {
   const handleSwitchSession = useCallback((sessionId: string) => {
     dispatch({ type: 'SWITCH_SESSION', payload: sessionId });
     setSidebarVisible(false);
-    setActiveTab('receipt'); // Reset to receipt view on session switch
+    setActiveTab('receipt');
     setHasNewMessage(false);
   }, []);
 
@@ -505,6 +513,7 @@ const App: React.FC = () => {
     if (!activeSession || !activeSession.parsedReceipt) return;
     dispatch({ type: 'SEND_MESSAGE_START', payload: { sessionId: activeSession.id, message } });
     try {
+      triggerHapticFeedback();
       const update = await updateAssignments(message, activeSession.parsedReceipt.items, activeSession.assignments);
       const updatedPeopleSet = new Set(activeSession.people);
       Object.values(update.newAssignments).flat().forEach(name => updatedPeopleSet.add(name));
@@ -558,6 +567,17 @@ const App: React.FC = () => {
     if (!activeSession) return;
     dispatch({ type: 'SPLIT_ALL_EQUALLY', payload: { sessionId: activeSession.id } });
   }, [activeSession]);
+  
+  const handleSplitItem = useCallback((itemId: string) => {
+      if (!activeSession) return;
+      dispatch({ type: 'SPLIT_ITEM_EVENLY', payload: { sessionId: activeSession.id, itemId } });
+  }, [activeSession]);
+
+  const handleClearItem = useCallback((itemId: string) => {
+      if (!activeSession) return;
+      dispatch({ type: 'CLEAR_ITEM_ASSIGNMENT', payload: { sessionId: activeSession.id, itemId } });
+  }, [activeSession]);
+
 
   const handleClearChat = useCallback(() => {
     if (!activeSession) return;
@@ -622,23 +642,7 @@ const App: React.FC = () => {
               </button>
            </div>
         )}
-        {activeSession.status === 'parsing' && (
-            <div className="flex flex-col items-center justify-center h-full p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark">
-                <svg className="animate-spin h-12 w-12 text-primary dark:text-primary-dark mb-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <h3 className="text-xl font-semibold mb-2 text-text-primary dark:text-text-primary-dark">Reading your receipt...</h3>
-                <p className="text-text-secondary dark:text-text-secondary-dark mb-6 text-center max-w-md">
-                    {loadingTips[currentTipIndex]}
-                </p>
-                <div className="flex gap-2">
-                    <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse"></div>
-                    <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse [animation-delay:0.2s]"></div>
-                    <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary-dark animate-pulse [animation-delay:0.4s]"></div>
-                </div>
-            </div>
-        )}
+        {activeSession.status === 'parsing' && <ReceiptSkeleton />}
         {activeSession.parsedReceipt && (
             <ReceiptDisplay
                 receipt={activeSession.parsedReceipt}
@@ -653,6 +657,8 @@ const App: React.FC = () => {
                 isInteractive={activeSession.status === 'ready'}
                 onEditItem={handleEditItem}
                 onEditTotals={handleEditTotals}
+                onSplitItem={handleSplitItem}
+                onClearItem={handleClearItem}
             />
         )}
     </>
@@ -669,6 +675,7 @@ const App: React.FC = () => {
         onClearChat={handleClearChat}
     />
   );
+  
 
   return (
     <div className="h-screen bg-background dark:bg-background-dark font-sans flex flex-col">
@@ -691,14 +698,12 @@ const App: React.FC = () => {
           </div>
           <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-full text-on-primary dark:text-text-primary-dark hover:bg-white/10 dark:hover:bg-primary-dark/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-primary-dark focus:ring-white" aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
               {theme === 'light' ? (
-                  // Moon icon for switching to dark mode
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                    <path fillRule="evenodd" d="M7.758 1.562a.75.75 0 0 1 .916.916 6 6 0 0 0 7.22 7.22.75.75 0 0 1 .916.916 7.5 7.5 0 1 1-9.052-9.052Z" clipRule="evenodd" />
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                    <path d="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM7.5 12a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM18.894 6.106a.75.75 0 0 1 0 1.06l-1.591 1.591a.75.75 0 1 1-1.06-1.06l1.591-1.591a.75.75 0 0 1 1.06 0ZM21.75 12a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5h2.25a.75.75 0 0 1 .75.75ZM17.803 17.803a.75.75 0 0 1-1.06 0l-1.591-1.591a.75.75 0 1 1 1.06-1.06l1.591 1.591a.75.75 0 0 1 0 1.06ZM12 21.75a.75.75 0 0 1-.75-.75v-2.25a.75.75 0 0 1 1.5 0v2.25a.75.75 0 0 1-.75-.75ZM6.106 18.894a.75.75 0 0 1-1.06 0l-1.591-1.591a.75.75 0 1 1 1.06-1.06l1.591 1.591a.75.75 0 0 1 0 1.06ZM3 12a.75.75 0 0 1 .75-.75h2.25a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12ZM6.197 7.197a.75.75 0 0 1 1.06 0l1.591 1.591a.75.75 0 1 1-1.06 1.06L6.197 8.257a.75.75 0 0 1 0-1.06Z" />
                   </svg>
               ) : (
-                  // Sun icon for switching to light mode
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                    <path d="M10 2a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 2ZM10 15a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 15ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM15.657 4.343a.75.75 0 0 1 0 1.06l-1.06 1.06a.75.75 0 0 1-1.06-1.06l1.06-1.06a.75.75 0 0 1 1.06 0ZM6.464 13.536a.75.75 0 0 1 0 1.06l-1.06 1.06a.75.75 0 0 1-1.06-1.06l1.06-1.06a.75.75 0 0 1 1.06 0ZM18 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 18 10ZM4.25 10.75a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM13.536 6.464a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 0 1-1.06 1.06l-1.06-1.06a.75.75 0 0 1 0-1.06ZM4.343 15.657a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 1 1-1.06 1.06l-1.06-1.06a.75.75 0 0 1 0-1.06Z" />
+                    <path fillRule="evenodd" d="M7.758 1.562a.75.75 0 0 1 .916.916 6 6 0 0 0 7.22 7.22.75.75 0 0 1 .916.916 7.5 7.5 0 1 1-9.052-9.052Z" clipRule="evenodd" />
                   </svg>
               )}
           </button>
@@ -734,6 +739,7 @@ const App: React.FC = () => {
                     <div className="flex-grow min-h-0 overflow-y-auto">
                         {activeTab === 'receipt' ? receiptContent : chatContent}
                     </div>
+                     <div className="h-16 flex-shrink-0" /> {/* Spacer for BottomNavBar */}
                     <BottomNavBar
                         activeTab={activeTab}
                         hasNewMessage={hasNewMessage}
@@ -742,17 +748,7 @@ const App: React.FC = () => {
                 </div>
               </>
             ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark">
-                    <div className="text-6xl mb-6">📄✨</div>
-                    <h2 className="text-3xl font-bold mb-3 text-text-primary dark:text-text-primary-dark">Welcome to Splitly AI</h2>
-                    <p className="max-w-md mb-8 text-text-secondary dark:text-text-secondary-dark">The smartest way to split bills. Just upload a receipt and let our AI do the heavy lifting.</p>
-                    <button 
-                      onClick={() => fileInputRef.current?.click()}
-                      className="bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-3 px-8 rounded-lg transition-transform transform hover:scale-105"
-                    >
-                      Upload Your First Receipt
-                    </button>
-                </div>
+                <WelcomeScreen onUploadClick={() => fileInputRef.current?.click()} />
             )}
         </main>
       </div>

@@ -91,4 +91,6 @@ export type AppAction =
   | { type: 'SPLIT_ALL_EQUALLY'; payload: { sessionId: string } }
   | { type: 'CLEAR_CHAT_HISTORY'; payload: { sessionId: string } }
   | { type: 'UNDO_LAST_ASSIGNMENT'; payload: { sessionId: string } }
+  | { type: 'SPLIT_ITEM_EVENLY'; payload: { sessionId: string; itemId: string } }
+  | { type: 'CLEAR_ITEM_ASSIGNMENT'; payload: { sessionId: string; itemId: string } }
   | { type: 'RESET_APP' };

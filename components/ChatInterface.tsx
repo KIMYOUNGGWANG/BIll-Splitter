@@ -4,6 +4,7 @@ import { ChatMessage, BillSummary, ReceiptSession } from '../types';
 import { exportBillSummary, shareBillSummary } from '../utils/billExporter';
 import { useToast } from '../context/ToastContext';
 import ConfirmationModal from './ConfirmationModal';
+import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
 
 interface BillSummaryProps {
   summary: BillSummary;
@@ -16,12 +17,13 @@ interface BillSummaryProps {
   isInsideBubble: boolean;
 }
 
-const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, receipt, receiptName, isInteractive, onEditPersonName, assignedItemsCount, totalItemsCount, isInsideBubble }) => {
+
+const PersonSummaryRow: React.FC<{ person: BillSummary[0]; isInteractive: boolean; onEditPersonName: (oldName: string, newName: string) => void; }> = React.memo(({ person, isInteractive, onEditPersonName }) => {
     const [editingName, setEditingName] = useState<string | null>(null);
     const [expandedName, setExpandedName] = useState<string | null>(null);
     const [newNameInput, setNewNameInput] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
-    const { addToast } = useToast();
+    const animatedTotal = useAnimatedNumber(person.total, 500);
 
     useEffect(() => {
         if (editingName && inputRef.current) {
@@ -37,7 +39,7 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, re
     const handleEditClick = useCallback((name: string) => {
         setEditingName(name);
         setNewNameInput(name);
-        setExpandedName(null); // Collapse when editing starts
+        setExpandedName(null);
     }, []);
 
     const handleCancel = useCallback(() => {
@@ -46,23 +48,103 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, re
     }, []);
 
     const handleSave = useCallback(() => {
-        if (editingName) {
-            onEditPersonName(editingName, newNameInput);
+        if (editingName && newNameInput.trim() && editingName !== newNameInput.trim()) {
+            onEditPersonName(editingName, newNameInput.trim());
         }
         handleCancel();
     }, [editingName, newNameInput, onEditPersonName, handleCancel]);
 
     const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
-        if (event.key === 'Enter') {
-            handleSave();
-        } else if (event.key === 'Escape') {
-            handleCancel();
-        }
+        if (event.key === 'Enter') handleSave();
+        else if (event.key === 'Escape') handleCancel();
     }, [handleSave, handleCancel]);
-    
+
+    return (
+        <div className="p-3 bg-surface dark:bg-surface-dark rounded-md shadow-sm">
+            {editingName === person.name ? (
+                <div>
+                    <div className="flex justify-between items-center font-bold">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={newNameInput}
+                            onChange={(e) => setNewNameInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            onBlur={handleSave}
+                            className="text-primary dark:text-primary-dark bg-background dark:bg-background-dark focus:bg-white dark:focus:bg-gray-800 p-1 rounded-md border-b-2 border-primary dark:border-primary-dark focus:outline-none w-full mr-2"
+                            aria-label={`Edit name for ${person.name}`}
+                        />
+                        <div className="flex items-center gap-2">
+                             <button onClick={handleSave} aria-label="Save name" className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.052-.143Z" clipRule="evenodd" /></svg>
+                            </button>
+                             <button onClick={handleCancel} aria-label="Cancel editing" className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
+                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                 <div>
+                    <div
+                        className="group flex justify-between items-center font-bold cursor-pointer"
+                        onClick={() => setExpandedName(expandedName === person.name ? null : person.name)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setExpandedName(expandedName === person.name ? null : person.name) } }}
+                        aria-expanded={expandedName === person.name}
+                        aria-controls={`summary-details-${person.name}`}
+                    >
+                        <div className="flex items-center">
+                            <span className="text-primary dark:text-primary-dark">{person.name}</span>
+                            {isInteractive && (
+                                <button onClick={(e) => { e.stopPropagation(); handleEditClick(person.name) }} className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 ml-1" aria-label={`Edit name for ${person.name}`}>
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-text-secondary dark:text-text-secondary-dark"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 0 0 .65.65l3.154-1.262a.5.5 0 0 0 .31-.245l11.359-11.359a.5.5 0 0 0 0-.707l-2.121-2.121a.5.5 0 0 0-.707 0L2.94 14.453a.5.5 0 0 0-.245.31Z" /></svg>
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex items-center">
+                            <span className="text-lg font-mono text-primary dark:text-primary-dark ml-2">{formatCurrency(animatedTotal)}</span>
+                             <svg className={`w-5 h-5 ml-2 text-text-secondary dark:text-text-secondary-dark transition-transform transform ${expandedName === person.name ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                        </div>
+                    </div>
+                    <div id={`summary-details-${person.name}`} className={`grid transition-all duration-300 ease-in-out ${expandedName === person.name ? 'grid-rows-[1fr] mt-3' : 'grid-rows-[0fr]'}`}>
+                        <div className="overflow-hidden">
+                            <div className="pt-3 border-t border-border dark:border-border-dark">
+                                <h4 className="text-sm font-semibold text-text-secondary dark:text-text-secondary-dark mb-1">Item Breakdown:</h4>
+                                {person.items.length > 0 ? (
+                                    <ul className="text-xs text-text-secondary dark:text-text-secondary-dark space-y-1 pl-2">
+                                        {person.items.map((item, index) => (
+                                            <li key={index} className="flex justify-between">
+                                                <span className="truncate pr-2">{item.name}</span>
+                                                <span className="font-mono flex-shrink-0">{formatCurrency(item.price)}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <p className="text-xs text-text-secondary dark:text-text-secondary-dark italic pl-2">No items assigned.</p>
+                                )}
+                                <div className="text-xs text-text-secondary dark:text-text-secondary-dark space-y-1 mt-3 pt-2 border-t border-dashed border-border dark:border-border-dark">
+                                    <div className="flex justify-between"><span>Subtotal share:</span> <span className="font-mono">{formatCurrency(person.subtotal)}</span></div>
+                                    <div className="flex justify-between"><span>Tax share:</span> <span className="font-mono">{formatCurrency(person.tax)}</span></div>
+                                    <div className="flex justify-between"><span>Tip share:</span> <span className="font-mono">{formatCurrency(person.tip)}</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+});
+
+
+const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, receipt, receiptName, isInteractive, onEditPersonName, assignedItemsCount, totalItemsCount, isInsideBubble }) => {
+    const { addToast } = useToast();
+
     const handleShare = useCallback(async () => {
       const success = await shareBillSummary(summary, receipt, receiptName);
-      if (success && !navigator.share) { // Only show copied status if it was a clipboard action
+      if (success && !navigator.share) {
           addToast('Summary copied to clipboard!', 'success');
       }
     }, [summary, receipt, receiptName, addToast]);
@@ -92,7 +174,7 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, re
             
             <div className="flex items-center gap-2">
                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 flex-grow">
-                    <div className={`h-2 rounded-full transition-all ${isComplete ? 'bg-green-500' : 'bg-primary dark:bg-primary-dark'}`} style={{ width: `${progressPercentage}%` }}></div>
+                    <div className={`h-2 rounded-full transition-width duration-500 ease-in-out ${isComplete ? 'bg-green-500' : 'bg-primary dark:bg-primary-dark'}`} style={{ width: `${progressPercentage}%` }}></div>
                 </div>
                  <div className="flex items-center gap-2 flex-shrink-0">
                     <span className="text-xs font-medium text-text-secondary dark:text-text-secondary-dark">{assignedItemsCount}/{totalItemsCount}</span>
@@ -113,96 +195,12 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, re
             )}
             
             {summary.map(person => (
-                <div key={person.name} className="p-3 bg-surface dark:bg-surface-dark rounded-md shadow-sm">
-                    {editingName === person.name ? (
-                        <div>
-                            <div className="flex justify-between items-center font-bold">
-                                <input
-                                    ref={inputRef}
-                                    type="text"
-                                    value={newNameInput}
-                                    onChange={(e) => setNewNameInput(e.target.value)}
-                                    onKeyDown={handleKeyDown}
-                                    onBlur={handleCancel}
-                                    className="text-primary dark:text-primary-dark bg-background dark:bg-background-dark focus:bg-white dark:focus:bg-gray-800 p-1 rounded-md border-b-2 border-primary dark:border-primary-dark focus:outline-none w-full mr-2"
-                                    aria-label={`Edit name for ${person.name}`}
-                                />
-                                <div className="flex items-center gap-2">
-                                    <button onClick={handleSave} aria-label="Save name" className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                                          <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.052-.143Z" clipRule="evenodd" /></svg>
-                                    </button>
-                                    <button onClick={handleCancel} aria-label="Cancel editing" className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
-                                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                                         <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-                                       </svg>
-                                    </button>
-                                </div>
-                            </div>
-                             <div className="text-xs text-text-secondary dark:text-text-secondary-dark mt-2 space-y-1">
-                                <p className="italic text-center">Total will be recalculated after saving.</p>
-                            </div>
-                        </div>
-                    ) : (
-                        <div>
-                            <div
-                                className="group flex justify-between items-center font-bold cursor-pointer"
-                                onClick={() => setExpandedName(expandedName === person.name ? null : person.name)}
-                                role="button"
-                                tabIndex={0}
-                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setExpandedName(expandedName === person.name ? null : person.name) } }}
-                                aria-expanded={expandedName === person.name}
-                                aria-controls={`summary-details-${person.name}`}
-                            >
-                                <div className="flex items-center">
-                                    <span className="text-primary dark:text-primary-dark">{person.name}</span>
-                                    {isInteractive && (
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handleEditClick(person.name) }} 
-                                            className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 ml-1" 
-                                            aria-label={`Edit name for ${person.name}`}
-                                        >
-                                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-text-secondary dark:text-text-secondary-dark">
-                                            <path d="M2.695 14.763l-1.262 3.154a.5.5 0 0 0 .65.65l3.154-1.262a.5.5 0 0 0 .31-.245l11.359-11.359a.5.5 0 0 0 0-.707l-2.121-2.121a.5.5 0 0 0-.707 0L2.94 14.453a.5.5 0 0 0-.245.31Z" />
-                                          </svg>
-                                        </button>
-                                    )}
-                                </div>
-                                <div className="flex items-center">
-                                    <span className="text-lg font-mono text-primary dark:text-primary-dark ml-2">{formatCurrency(person.total)}</span>
-                                    <svg className={`w-5 h-5 ml-2 text-text-secondary dark:text-text-secondary-dark transition-transform transform ${expandedName === person.name ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                                    </svg>
-                                </div>
-                            </div>
-                            <div id={`summary-details-${person.name}`} className={`grid transition-all duration-300 ease-in-out ${expandedName === person.name ? 'grid-rows-[1fr] mt-3' : 'grid-rows-[0fr]'}`}>
-                                <div className="overflow-hidden">
-                                    <div className="pt-3 border-t border-border dark:border-border-dark">
-                                        <h4 className="text-sm font-semibold text-text-secondary dark:text-text-secondary-dark mb-1">Item Breakdown:</h4>
-                                        {person.items.length > 0 ? (
-                                            <ul className="text-xs text-text-secondary dark:text-text-secondary-dark space-y-1 pl-2">
-                                                {person.items.map((item, index) => (
-                                                    <li key={index} className="flex justify-between">
-                                                        <span className="truncate pr-2">{item.name}</span>
-                                                        <span className="font-mono flex-shrink-0">{formatCurrency(item.price)}</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        ) : (
-                                            <p className="text-xs text-text-secondary dark:text-text-secondary-dark italic pl-2">No items assigned.</p>
-                                        )}
-
-                                        <div className="text-xs text-text-secondary dark:text-text-secondary-dark space-y-1 mt-3 pt-2 border-t border-dashed border-border dark:border-border-dark">
-                                            <div className="flex justify-between"><span>Subtotal share:</span> <span className="font-mono">{formatCurrency(person.subtotal)}</span></div>
-                                            <div className="flex justify-between"><span>Tax share:</span> <span className="font-mono">{formatCurrency(person.tax)}</span></div>
-                                            <div className="flex justify-between"><span>Tip share:</span> <span className="font-mono">{formatCurrency(person.tip)}</span></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
+                <PersonSummaryRow 
+                    key={person.name}
+                    person={person}
+                    isInteractive={isInteractive}
+                    onEditPersonName={onEditPersonName}
+                />
             ))}
         </div>
     );
