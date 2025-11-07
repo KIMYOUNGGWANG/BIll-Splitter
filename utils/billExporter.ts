@@ -1,13 +1,14 @@
+
 import type { BillSummary, ParsedReceipt } from '../types';
 
 function formatSummaryAsText(summary: BillSummary, receipt: ParsedReceipt | null, receiptName: string): string {
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
-  let text = `Bill Summary for: ${receiptName}\n`;
+  let text = `Bill Summary for [${receiptName}]\n`;
   text += '====================================\n\n';
 
   summary.forEach(person => {
-    text += `--- ${person.name} --- owes ${formatCurrency(person.total)} ---\n`;
+    text += `--- ${person.name} --- Total: ${formatCurrency(person.total)} ---\n`;
     if (person.items.length > 0) {
       person.items.forEach(item => {
         text += `  - ${item.name}: ${formatCurrency(item.price)}\n`;
@@ -24,7 +25,7 @@ function formatSummaryAsText(summary: BillSummary, receipt: ParsedReceipt | null
     text += `Subtotal: ${formatCurrency(receipt.subtotal)}\n`;
     text += `Tax: ${formatCurrency(receipt.tax)}\n`;
     text += `Tip: ${formatCurrency(receipt.tip)}\n`;
-    text += `Total: ${formatCurrency(receipt.subtotal + receipt.tax + receipt.tip)}\n`;
+    text += `GRAND TOTAL: ${formatCurrency(receipt.subtotal + receipt.tax + receipt.tip)}\n`;
     text += '====================================\n';
   }
 
@@ -52,7 +53,7 @@ export async function shareBillSummary(summary: BillSummary, receipt: ParsedRece
   if (navigator.share) {
     try {
       await navigator.share({
-        title: `Bill Summary for ${receiptName}`,
+        title: `Bill Summary for [${receiptName}]`,
         text: text,
       });
       return true;

@@ -198,7 +198,7 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
             tabIndex={isInteractive ? 0 : -1}
             onClick={onZoomRequest}
             onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onZoomRequest()}
-            aria-label={`Zoom in on ${item.name}`}
+            aria-label={`Zoom on ${item.name}`}
           >
             <div className="flex items-center gap-2 flex-1 min-w-0">
                 <div 
@@ -291,12 +291,12 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
             </div>
           ) : (
             <div className="text-xs font-medium mt-1 flex items-center">
-              <span className="text-text-secondary dark:text-text-secondary-dark mr-1">Assigned to:</span>
+              <span className="text-text-secondary dark:text-text-secondary-dark mr-1">Assigned:</span>
               <button
                 onClick={handleEdit}
                 disabled={!isInteractive}
                 className={`text-left p-1 -ml-1 rounded transition-colors disabled:cursor-default ${isInteractive ? 'text-primary dark:text-primary-dark hover:bg-primary/10 dark:hover:bg-primary-dark/10 cursor-pointer' : 'text-text-secondary dark:text-text-secondary-dark'}`}
-                aria-label={`Edit assignment for ${item.name}. Currently ${getAssignedNamesText()}`}
+                aria-label={`Edit assignment for ${item.name}. Currently assigned to: ${getAssignedNamesText()}`}
                 aria-expanded={isEditing}
                 aria-controls={`edit-assignment-${item.id}`}
               >
@@ -387,7 +387,7 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
     <>
         <div className="bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark h-full flex flex-col">
           <div className="p-4 border-b border-border dark:border-border-dark space-y-3">
-            <div className="flex justify-between items-start gap-2">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
                <div
                   className="flex items-center gap-2 cursor-pointer group"
                   onClick={() => setIsItemListVisible(!isItemListVisible)}
@@ -402,7 +402,7 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
                     <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>
                 </div>
-              <div className="flex items-center gap-2 flex-wrap justify-end flex-shrink-0">
+              <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
                   {isInteractive && (
                       <button 
                           onClick={onUndoLastAssignment}
@@ -432,7 +432,7 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
                               setIsAssignAllModalOpen(true);
                           }}
                           className="px-2 py-1 text-xs font-semibold text-primary dark:text-primary-dark bg-primary/10 dark:bg-primary-dark/10 hover:bg-primary/20 dark:hover:bg-primary-dark/20 rounded-md transition-colors"
-                          aria-label="Assign all unassigned items to one person"
+                          aria-label="Assign all unassigned items"
                       >
                           Assign All Unassigned...
                       </button>
@@ -542,10 +542,10 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
                     tabIndex={-1}
                     onClick={(e) => e.stopPropagation()}
                     className="bg-surface dark:bg-surface-dark rounded-lg shadow-xl p-6 w-full max-w-sm m-4 focus:outline-none">
-                    <h3 id="assign-all-title" className="text-lg font-bold text-text-primary dark:text-text-primary-dark mb-4">Assign All Unassigned Items</h3>
+                    <h3 id="assign-all-title" className="text-lg font-bold text-text-primary dark:text-text-primary-dark mb-4">Assign All Unassigned</h3>
                     <p className="text-sm text-text-secondary dark:text-text-secondary-dark mb-4">Select a person to assign all remaining unassigned items to.</p>
                     <fieldset>
-                        <legend className="sr-only">People list</legend>
+                        <legend className="sr-only">List of people</legend>
                         <div className="space-y-2 max-h-48 overflow-y-auto border-y border-border dark:border-border-dark py-2">
                             {people.map(person => (
                                 <label key={person} className="flex items-center p-2 rounded-md hover:bg-background dark:hover:bg-background-dark cursor-pointer">
@@ -586,7 +586,7 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
             onClose={() => setIsSplitAllModalOpen(false)}
             onConfirm={handleConfirmSplitAll}
             title="Split All Items Equally"
-            message={`Are you sure you want to assign every item on this receipt to all ${people.length} people? This will overwrite all current assignments.`}
+            message={`Are you sure you want to assign ALL items on this receipt to everyone (${people.length} people)? This will overwrite all current assignments.`}
             variant="primary"
         />
         <ImageZoomModal

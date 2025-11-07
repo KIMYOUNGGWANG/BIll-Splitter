@@ -78,7 +78,7 @@ const PersonSummaryRow: React.FC<{ person: BillSummary[0]; isInteractive: boolea
                              <button onClick={handleSave} aria-label="Save name" className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.052-.143Z" clipRule="evenodd" /></svg>
                             </button>
-                             <button onClick={handleCancel} aria-label="Cancel editing" className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
+                             <button onClick={handleCancel} aria-label="Cancel edit" className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
                             </button>
                         </div>
@@ -111,7 +111,7 @@ const PersonSummaryRow: React.FC<{ person: BillSummary[0]; isInteractive: boolea
                     <div id={`summary-details-${person.name}`} className={`grid transition-all duration-300 ease-in-out ${expandedName === person.name ? 'grid-rows-[1fr] mt-3' : 'grid-rows-[0fr]'}`}>
                         <div className="overflow-hidden">
                             <div className="pt-3 border-t border-border dark:border-border-dark">
-                                <h4 className="text-sm font-semibold text-text-secondary dark:text-text-secondary-dark mb-1">Item Breakdown:</h4>
+                                <h4 className="text-sm font-semibold text-text-secondary dark:text-text-secondary-dark mb-1">Itemized:</h4>
                                 {person.items.length > 0 ? (
                                     <ul className="text-xs text-text-secondary dark:text-text-secondary-dark space-y-1 pl-2">
                                         {person.items.map((item, index) => (
@@ -125,9 +125,9 @@ const PersonSummaryRow: React.FC<{ person: BillSummary[0]; isInteractive: boolea
                                     <p className="text-xs text-text-secondary dark:text-text-secondary-dark italic pl-2">No items assigned.</p>
                                 )}
                                 <div className="text-xs text-text-secondary dark:text-text-secondary-dark space-y-1 mt-3 pt-2 border-t border-dashed border-border dark:border-border-dark">
-                                    <div className="flex justify-between"><span>Subtotal share:</span> <span className="font-mono">{formatCurrency(person.subtotal)}</span></div>
-                                    <div className="flex justify-between"><span>Tax share:</span> <span className="font-mono">{formatCurrency(person.tax)}</span></div>
-                                    <div className="flex justify-between"><span>Tip share:</span> <span className="font-mono">{formatCurrency(person.tip)}</span></div>
+                                    <div className="flex justify-between"><span>Subtotal:</span> <span className="font-mono">{formatCurrency(person.subtotal)}</span></div>
+                                    <div className="flex justify-between"><span>Tax:</span> <span className="font-mono">{formatCurrency(person.tax)}</span></div>
+                                    <div className="flex justify-between"><span>Tip:</span> <span className="font-mono">{formatCurrency(person.tip)}</span></div>
                                 </div>
                             </div>
                         </div>
@@ -155,7 +155,7 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, re
     if (summary.length === 0) {
         return (
             <div className="p-4 rounded-lg bg-background dark:bg-background-dark border border-border dark:border-border-dark text-center">
-                <p className="text-text-secondary dark:text-text-secondary-dark">Enter the names of the people splitting the bill to see the summary.</p>
+                <p className="text-text-secondary dark:text-text-secondary-dark">Enter names to see the summary.</p>
             </div>
         );
     }
@@ -168,7 +168,7 @@ const BillSummaryDisplay: React.FC<BillSummaryProps> = React.memo(({ summary, re
         <div className={containerClasses}>
              {!isInsideBubble && (
                  <div className="flex justify-between items-center gap-2">
-                     <h3 className="text-lg font-bold text-text-primary dark:text-text-primary-dark">Who Owes What</h3>
+                     <h3 className="text-lg font-bold text-text-primary dark:text-text-primary-dark">Bill Summary</h3>
                  </div>
              )}
             
@@ -277,13 +277,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
     if (!activeSession) return "Loading...";
     switch (activeSession.status) {
         case 'awaiting_names':
-            return 'Enter names, e.g., "Sue, Dhruv, Sarah"';
+            return 'Enter names (e.g., Alice, Bob, Charlie)';
         case 'ready':
-            return 'e.g., "Dhruv had the nachos" (Shift+Enter for newline)';
+            return 'e.g., "Alice had the nachos" (Newline: Shift+Enter)';
         case 'assigning':
             return 'Thinking...';
         default:
-            return 'Waiting for receipt...';
+            return 'Waiting for a receipt...';
     }
   };
 
@@ -414,7 +414,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
               </svg>
             </button>
           </form>
-          <div className="text-xs text-text-secondary dark:text-text-secondary-dark text-center pt-2 mt-2 flex items-center justify-center gap-4 border-t border-border dark:border-border-dark">
+          <div className="text-xs text-text-secondary dark:text-text-secondary-dark text-center pt-2 mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 border-t border-border dark:border-border-dark">
             <span className="flex items-center gap-1">
                 <kbd className="px-2 py-1.5 text-xs font-sans font-semibold text-text-secondary dark:text-text-secondary-dark bg-background dark:bg-background-dark rounded border border-b-2 border-border dark:border-border-dark">
                 Ctrl
@@ -423,7 +423,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
                 <kbd className="px-2 py-1.5 text-xs font-sans font-semibold text-text-secondary dark:text-text-secondary-dark bg-background dark:bg-background-dark rounded border border-b-2 border-border dark:border-border-dark">
                 K
                 </kbd>
-                <span className="ml-1">to focus</span>
+                <span className="ml-1">Focus</span>
             </span>
             <span className="flex items-center gap-1">
                 <kbd className="px-2 py-1.5 text-xs font-sans font-semibold text-text-secondary dark:text-text-secondary-dark bg-background dark:bg-background-dark rounded border border-b-2 border-border dark:border-border-dark">
@@ -433,7 +433,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
                 <kbd className="px-2 py-1.5 text-xs font-sans font-semibold text-text-secondary dark:text-text-secondary-dark bg-background dark:bg-background-dark rounded border border-b-2 border-border dark:border-border-dark">
                 Z
                 </kbd>
-                <span className="ml-1">to undo</span>
+                <span className="ml-1">Undo</span>
             </span>
           </div>
         </div>
@@ -442,7 +442,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
             onClose={() => setIsClearConfirmOpen(false)}
             onConfirm={handleConfirmClearChat}
             title="Clear Chat History"
-            message="Are you sure you want to clear the chat history for this receipt? This action cannot be undone, but item assignments will not be affected."
+            message="Are you sure you want to clear the chat history for this receipt? This won't affect item assignments, but it cannot be undone."
         />
     </>
   );

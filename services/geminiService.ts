@@ -8,7 +8,7 @@ import { ParsedReceipt, ReceiptItem, Assignments, AssignmentUpdate } from '../ty
 function getAiClient() {
     const apiKey = process.env.API_KEY;
     if (!apiKey) {
-      throw new Error("API_KEY environment variable is not set. Please ensure it is configured correctly.");
+      throw new Error("API_KEY environment variable not set. Please ensure it is configured correctly.");
     }
     return new GoogleGenAI({ apiKey });
 }
@@ -18,13 +18,13 @@ const receiptSchema = {
   properties: {
     items: {
       type: Type.ARRAY,
-      description: "List of all items from the receipt.",
+      description: "A list of all items on the receipt.",
       items: {
         type: Type.OBJECT,
         properties: {
           id: {
             type: Type.STRING,
-            description: "A unique identifier for the item, e.g., 'item-1'."
+            description: "A unique identifier for the item (e.g., 'item-1')."
           },
           name: {
             type: Type.STRING,
@@ -44,7 +44,7 @@ const receiptSchema = {
     },
     subtotal: {
       type: Type.NUMBER,
-      description: "The subtotal amount before tax and tip."
+      description: "The subtotal amount, before tax and tip."
     },
     tax: {
       type: Type.NUMBER,
@@ -68,10 +68,10 @@ export async function parseReceipt(imageBase64: string, mimeType: string): Promi
   };
 
   const textPart = {
-    text: `You are a receipt parsing expert. Your primary task is to determine if the given image is a receipt.
-- If the image is clearly a receipt, analyze it. Extract all line items with their quantity and price, the subtotal, tax, and tip.
-- If the image is NOT a receipt, or is completely unreadable, you MUST respond with a JSON object where the "items" array is empty.
-Generate a unique ID for each item on valid receipts. Format the output as JSON according to the schema. If any values are missing on a valid receipt, use 0.`
+    text: `You are an expert receipt parser. Your primary task is to determine if the given image is a receipt.
+- If the image is clearly a receipt, proceed with parsing. Extract all line items with their quantity and price, the subtotal, tax, and tip.
+- If the image is NOT a receipt or is completely unreadable, you MUST respond with a JSON object where the "items" array is empty.
+For valid receipts, create a unique ID for each item. Format the output as JSON according to the schema. Use 0 for any values that are not present on a valid receipt.`
   };
 
   const response = await ai.models.generateContent({
@@ -91,12 +91,12 @@ Generate a unique ID for each item on valid receipts. Format the output as JSON 
 
     // 1. Check if essential parts exist
     if (!parsedData || !Array.isArray(parsedData.items)) {
-      throw new Error("The AI returned an invalid structure. The 'items' array is missing.");
+      throw new Error("The AI returned an unexpected response. This might be a temporary issue, please try again.");
     }
     
     // 2. Check if any items were found. If not, it's likely not a receipt or is unreadable.
     if (parsedData.items.length === 0) {
-      throw new Error("This doesn't look like a receipt, or it's too blurry to read. Please upload a clear picture of a receipt.");
+      throw new Error("This image does not appear to be a receipt or is too blurry to read. Please try another, clearer picture.");
     }
 
     // 3. Sanitize and validate each item
@@ -130,11 +130,13 @@ Generate a unique ID for each item on valid receipts. Format the output as JSON 
   } catch (e) {
     console.error("Failed to parse or validate receipt JSON:", e, "Raw response:", response.text);
     if (e instanceof Error) {
-        // Re-throw the specific, user-friendly error message
-        throw new Error(e.message);
+        // If it's one of our custom, user-friendly errors, just re-throw it.
+        if (e.message.includes("not appear to be a receipt") || e.message.includes("unexpected response")) {
+            throw e;
+        }
     }
-    // Fallback error
-    throw new Error("The AI could not read the receipt. Please try again with a clearer image.");
+    // For all other errors (e.g., JSON.parse failure on a garbled AI response), provide a robust fallback.
+    throw new Error("The AI couldn't fully process this receipt. This can happen due to glare, unusual formatting, or blurriness. You can retry, or try a new photo for better results.");
   }
 }
 
@@ -159,11 +161,11 @@ export async function updateAssignments(
         properties: {
             botResponse: {
                 type: Type.STRING,
-                description: "A friendly, conversational summary of the changes made. For example: 'Okay, I've assigned the Nachos to Dhruv.'"
+                description: "A friendly, conversational summary of the changes you made. E.g., 'Okay, I've assigned the nachos to Alice.'"
             },
             assignments: {
                 type: Type.ARRAY,
-                description: "An array of assignment objects, covering all items from the receipt.",
+                description: "An array of assignment objects, which MUST include every item from the receipt.",
                 items: {
                     type: Type.OBJECT,
                     properties: {
@@ -173,7 +175,7 @@ export async function updateAssignments(
                         },
                         names: {
                             type: Type.ARRAY,
-                            description: "A list of names assigned to this item. Should be an empty array if unassigned.",
+                            description: "A list of names this item is assigned to. Should be an empty array if unassigned.",
                             items: {
                                 type: Type.STRING
                             }
@@ -189,19 +191,19 @@ export async function updateAssignments(
   // 2. Prompt Trimming: Create a lightweight version of items for the prompt.
   const lightweightItems = items.map(({ id, name }) => ({ id, name }));
 
-  const prompt = `You are a bill splitting assistant. Your task is to update item assignments based on a user's request and provide a conversational summary of the action taken.
+  const prompt = `You are a bill splitting assistant. Your task is to update item assignments based on user requests and provide a conversational summary of what you did.
   
-You will be given the list of items from a receipt, the current assignments, and the user's command. 
+You are given a list of items on a receipt, the current assignment state, and a user's command.
 
-Respond ONLY with a JSON object. This object must contain two keys: "botResponse" and "assignments".
-1.  "botResponse": A friendly, natural language string summarizing the changes you made.
-2.  "assignments": An array of objects, where each object represents an item from the receipt and has an "itemId" and a "names" array. Every single item from the original receipt must be present in your response. If an item is unassigned, its "names" array should be empty.
+You MUST respond ONLY with a JSON object. This object must contain two keys: "botResponse" and "assignments".
+1. "botResponse": A friendly, natural language string summarizing the changes you made.
+2. "assignments": An array of objects where each object represents an item from the receipt and has an "itemId" and a "names" array. Every single item from the original receipt MUST be present in your response. If an item is unassigned, its "names" array should be empty.
 
-Current items: ${JSON.stringify(lightweightItems, null, 2)}
-Current assignments: ${JSON.stringify(currentAssignments, null, 2)}
-User command: "${userInput}"
+Current Items: ${JSON.stringify(lightweightItems, null, 2)}
+Current Assignments: ${JSON.stringify(currentAssignments, null, 2)}
+User Command: "${userInput}"
 
-Your response must be a valid JSON object following the specified structure.
+Your response must be a valid JSON object that follows the specified structure.
 `;
 
   const response = await ai.models.generateContent({
@@ -224,6 +226,7 @@ Your response must be a valid JSON object following the specified structure.
         }
     }
     
+    // Ensure all original items are present in the new assignments, even if empty.
     for (const item of items) {
         if (!(item.id in newAssignments)) {
             newAssignments[item.id] = [];

@@ -1,3 +1,4 @@
+
 import React, { useReducer, useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import SessionSidebar from './components/SessionSidebar';
 import ReceiptDisplay from './components/ReceiptDisplay';
@@ -53,7 +54,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
           assignments: action.payload.initialAssignments,
           chatHistory: [{
             sender: 'bot',
-            text: "I've parsed the receipt! First, please tell me who is splitting the bill. Enter their names separated by commas (e.g., Sue, Dhruv, Sarah)."
+            text: "I've analyzed the receipt! First, tell me who is splitting the bill. Please enter their names separated by commas (e.g., Alice, Bob, Charlie)."
           }]
         } : s),
       };
@@ -65,7 +66,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
           ...s,
           status: 'error',
           errorMessage: action.payload.message,
-          chatHistory: [{ sender: 'system', text: `Failed to parse receipt: ${action.payload.message}`}]
+          chatHistory: [{ sender: 'system', text: `Receipt parsing failed: ${action.payload.message}`}]
         } : s),
       };
 
@@ -119,10 +120,17 @@ function appReducer(state: AppState, action: AppAction): AppState {
                 };
                 
                 switch (action.type) {
+                  case 'RETRY_PARSING_START':
+                    return {
+                      ...session,
+                      status: 'parsing',
+                      errorMessage: null,
+                      chatHistory: [{ sender: 'system', text: 'Re-parsing receipt...' }],
+                    };
                   case 'SET_PEOPLE': {
                     const uniqueNames = [...new Set([...session.people, ...action.payload.names])];
                     return { ...session, status: 'ready', people: uniqueNames,
-                      chatHistory: [ ...session.chatHistory, { sender: 'user', text: action.payload.userInput }, { sender: 'bot', text: `Great! I've got ${uniqueNames.join(', ')}. Now you can tell me who had what, or click on items to assign them.` }]
+                      chatHistory: [ ...session.chatHistory, { sender: 'user', text: action.payload.userInput }, { sender: 'bot', text: `Got it! I've added ${uniqueNames.join(', ')}. Now you can tell me who had what, or click on items to assign them directly.` }]
                     };
                   }
                   case 'SEND_MESSAGE_START':
@@ -231,10 +239,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     }
                     
                     if (itemsAssignedCount === 0) {
-                        return { ...session, chatHistory: [...session.chatHistory, { sender: 'system', text: 'No unassigned items to assign.' }] };
+                        return { ...session, chatHistory: [...session.chatHistory, { sender: 'system', text: 'There were no unassigned items to assign.' }] };
                     }
 
-                    const message = `Assigned ${itemsAssignedCount} remaining item(s) to ${personName}.`;
+                    const message = `Assigned the remaining ${itemsAssignedCount} items to ${personName}.`;
                     const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
                     return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
                   }
@@ -248,7 +256,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
                         newAssignments[item.id] = [...session.people];
                     }
 
-                    const message = `All items have been split equally among ${session.people.length} people.`;
+                    const message = `Split all items equally between ${session.people.length} people.`;
                     const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
                     return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
                   }
@@ -264,7 +272,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
                           ...session,
                           assignments: lastState!,
                           assignmentsHistory: newHistory,
-                          chatHistory: [...session.chatHistory, { sender: 'system', text: 'Last assignment action undone.'}]
+                          chatHistory: [...session.chatHistory, { sender: 'system', text: 'Undid the last assignment action.'}]
                       };
                   }
                   
@@ -278,7 +286,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     if (!item || session.people.length === 0) return session;
 
                     triggerHapticFeedback();
-                    const message = `${item.name} has been split evenly among everyone.`;
+                    const message = `Split ${item.name} evenly amongst everyone.`;
                     const newAssignments = { ...session.assignments, [itemId]: session.people };
                     const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
                     return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
@@ -290,7 +298,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
                     if (!item) return session;
 
                     triggerHapticFeedback();
-                    const message = `${item.name} has been unassigned.`;
+                    const message = `Cleared assignment for ${item.name}.`;
                     const newAssignments = { ...session.assignments, [itemId]: [] };
                     const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
                     return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
@@ -448,7 +456,7 @@ const App: React.FC = () => {
         };
         img.onerror = () => {
           URL.revokeObjectURL(objectUrl);
-          reject(new Error("Failed to load image for compression. The file might be corrupt or an unsupported format. Please try a standard image format like JPEG or PNG."));
+          reject(new Error("Failed to load image. The file may be corrupt or in an unsupported format. Please try a standard image format like JPEG or PNG."));
         };
         img.src = objectUrl;
     });
@@ -535,6 +543,36 @@ const App: React.FC = () => {
     }
   }, [activeSession]);
   
+  const handleRetryParsing = useCallback(async (sessionId: string) => {
+    const sessionToRetry = sessions.find(s => s.id === sessionId);
+    if (!sessionToRetry || !sessionToRetry.receiptImage) {
+        addToast('Cannot retry: Image data is missing.', 'error');
+        return;
+    }
+
+    dispatch({ type: 'RETRY_PARSING_START', payload: { sessionId } });
+
+    try {
+        const imageUrl = sessionToRetry.receiptImage;
+        const mimeType = imageUrl.substring(imageUrl.indexOf(':') + 1, imageUrl.indexOf(';'));
+        const base64 = imageUrl.split(',')[1];
+        
+        if (!base64 || !mimeType) {
+            throw new Error("Cannot retry, image data is corrupt.");
+        }
+        
+        const receipt = await parseReceipt(base64, mimeType);
+        const initialAssignments = receipt.items.reduce<Assignments>((acc, item) => {
+            acc[item.id] = [];
+            return acc;
+        }, {});
+        dispatch({ type: 'UPLOAD_SUCCESS', payload: { sessionId, receipt, initialAssignments } });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'An unknown error occurred.';
+        dispatch({ type: 'UPLOAD_ERROR', payload: { sessionId, message } });
+    }
+  }, [sessions, addToast]);
+  
   const handleDirectAssignment = useCallback((itemId: string, newNames: string[]) => {
     if (!activeSession) return;
     dispatch({ type: 'DIRECT_ASSIGNMENT', payload: { sessionId: activeSession.id, itemId, newNames } });
@@ -549,13 +587,13 @@ const App: React.FC = () => {
       return;
     }
     if (activeSession.people.map(p => p.toLowerCase()).includes(trimmedNewName.toLowerCase()) && oldName.toLowerCase() !== trimmedNewName.toLowerCase()) {
-      addToast(`Name '${trimmedNewName}' already exists.`, 'error');
+      addToast(`The name '${trimmedNewName}' already exists.`, 'error');
       return;
     }
     if (oldName === trimmedNewName) return;
 
     dispatch({ type: 'EDIT_PERSON_NAME', payload: { sessionId: activeSession.id, oldName, newName: trimmedNewName } });
-    addToast(`Name updated: '${oldName}' is now '${trimmedNewName}'.`, 'success');
+    addToast(`Renamed '${oldName}' to '${trimmedNewName}'.`, 'success');
   }, [activeSession, addToast]);
   
   const handleEditItem = useCallback((itemId: string, newName: string, newPrice: number) => {
@@ -620,19 +658,26 @@ const App: React.FC = () => {
         {activeSession.status === 'error' && (
            <div className="flex flex-col items-center justify-center h-full p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark text-center">
               <div className="text-6xl mb-6 animate-bounce">😕</div>
-              <h3 className="text-2xl font-bold mb-3 text-text-primary dark:text-text-primary-dark">Hmm, couldn't read that</h3>
-              <p className="text-center mb-6 max-w-md text-text-secondary dark:text-text-secondary-dark">
-                {activeSession.errorMessage}
-              </p>
+              <h3 className="text-2xl font-bold mb-3 text-text-primary dark:text-text-primary-dark">Parsing Failed</h3>
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-lg p-4 mb-6 max-w-md w-full flex items-start gap-3">
+                <div className="flex-shrink-0 text-red-500 dark:text-red-400 mt-0.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <p className="text-left font-medium text-red-700 dark:text-red-300">
+                    {activeSession.errorMessage}
+                </p>
+              </div>
               <div className="bg-background dark:bg-background-dark rounded-lg p-6 mb-6 max-w-md w-full">
-                <h4 className="font-bold mb-3 flex items-center gap-2 text-text-primary dark:text-text-primary-dark">
+                <h4 className="font-bold mb-3 flex items-center justify-center sm:justify-start gap-2 text-text-primary dark:text-text-primary-dark">
                   <span>💡</span>
                   <span>Tips for better results:</span>
                 </h4>
                 <ul className="text-sm space-y-2 text-left text-text-secondary dark:text-text-secondary-dark">
                   <li className="flex items-start gap-2">
                     <span className="text-green-500">✓</span>
-                    <span>Ensure good lighting and focus</span>
+                    <span>Ensure bright lighting and clear focus</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-green-500">✓</span>
@@ -644,12 +689,23 @@ const App: React.FC = () => {
                   </li>
                 </ul>
               </div>
-              <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-2 px-6 rounded-lg transition-colors"
-              >
-                Try Another Receipt
-              </button>
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <button 
+                    onClick={() => handleRetryParsing(activeSession.id)}
+                    className="bg-primary dark:bg-primary-dark hover:bg-primary-focus dark:hover:bg-primary-focus-dark text-on-primary dark:text-on-primary-dark font-bold py-2 px-6 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                      <path fillRule="evenodd" d="M15.312 11.342a1.25 1.25 0 0 1 .653 1.083c.032.525-.255 1.03-.738 1.282A7.001 7.001 0 0 1 2.999 10a7 7 0 0 1 11.916-5.22.75.75 0 0 1-1.042.082l-1.08-1.08a.75.75 0 0 1 .082-1.042A8.501 8.501 0 0 0 10 1.5a8.5 8.5 0 1 0 5.312 9.842ZM10.75 3.75a.75.75 0 0 0-1.5 0v4.44l-2.22-2.22a.75.75 0 0 0-1.06 1.06l3.5 3.5a.75.75 0 0 0 1.06 0l3.5-3.5a.75.75 0 1 0-1.06-1.06L10.75 8.19V3.75Z" clipRule="evenodd" />
+                    </svg>
+                    Retry
+                  </button>
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="bg-secondary dark:bg-secondary-dark hover:bg-secondary-focus dark:hover:bg-secondary-focus-dark text-on-secondary dark:text-on-secondary-dark font-bold py-2 px-6 rounded-lg transition-colors"
+                  >
+                    Upload New
+                  </button>
+              </div>
            </div>
         )}
         {activeSession.status === 'parsing' && <ReceiptSkeleton />}
@@ -695,7 +751,7 @@ const App: React.FC = () => {
             <button
                 onClick={() => setSidebarVisible(!isSidebarVisible)}
                 className="lg:hidden p-2 rounded-md text-on-primary dark:text-text-primary-dark hover:bg-white/10 dark:hover:bg-primary-dark/10 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
-                aria-label="Toggle sidebar"
+                aria-label="Open/close sidebar"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-6 h-6">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -737,11 +793,11 @@ const App: React.FC = () => {
             {activeSession ? (
               <>
                 {/* Desktop Layout */}
-                <div className="hidden lg:flex flex-row gap-4 h-full">
-                    <div className="w-1/2 h-full">
+                <div className="hidden lg:grid lg:grid-cols-2 lg:gap-4 h-full">
+                    <div className="h-full">
                         {receiptContent}
                     </div>
-                    <div className="w-1/2 h-full">
+                    <div className="h-full">
                         {chatContent}
                     </div>
                 </div>

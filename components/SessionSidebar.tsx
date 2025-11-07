@@ -1,3 +1,4 @@
+
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import type { ReceiptSession } from '../types';
 import ConfirmationModal from './ConfirmationModal';
