@@ -77,7 +77,9 @@ const EditableField: React.FC<EditableFieldProps> = ({
     return (
       <input
         ref={inputRef}
-        type={type}
+        type={type === 'number' ? 'text' : 'text'}
+        inputMode={type === 'number' ? 'decimal' : 'text'}
+        pattern={type === 'number' ? '[0-9]*[.,]?[0-9]*' : undefined}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onBlur={handleSave}
@@ -85,7 +87,6 @@ const EditableField: React.FC<EditableFieldProps> = ({
         onClick={(e) => e.stopPropagation()} // Prevent parent onClick while editing
         className={`bg-background dark:bg-background-dark p-1 rounded-md border-b-2 border-primary dark:border-primary-dark focus:outline-none w-full min-w-0 ${className}`}
         aria-label={ariaLabel}
-        step={type === 'number' ? '0.01' : undefined}
       />
     );
   }

@@ -12,7 +12,8 @@ import { calculateBillSummary } from './utils/billCalculator';
 import { formatAssignmentMessage, formatAssignmentUpdateMessage } from './utils/messageFormatter';
 import { triggerHapticFeedback } from './utils/haptics';
 import { useToast } from './context/ToastContext';
-import type { AppState, AppAction, Assignments, ReceiptSession, ChatMessage } from './types';
+import { fileToBase64 } from './utils/imageProcessor';
+import type { AppState, AppAction, Assignments, ReceiptSession, ChatMessage, ReceiptItem } from './types';
 
 const initialState: AppState = {
   sessions: [],
@@ -22,6 +23,288 @@ const initialState: AppState = {
 const MAX_UNDO_HISTORY = 10;
 const LOCAL_STORAGE_KEY = 'splitly-ai-sessions';
 
+function sessionReducer(session: ReceiptSession, action: AppAction): ReceiptSession {
+  const pushToHistory = (currentAssignments: Assignments, history: Assignments[]): Assignments[] => {
+      const newHistory = [...history, currentAssignments];
+      if (newHistory.length > MAX_UNDO_HISTORY) {
+          newHistory.shift();
+      }
+      return newHistory;
+  };
+
+  switch (action.type) {
+    case 'RETRY_PARSING_START':
+      return {
+        ...session,
+        status: 'parsing',
+        errorMessage: null,
+        chatHistory: [{ sender: 'system', text: 'Re-parsing receipt...' }],
+      };
+    case 'SET_PEOPLE': {
+      const uniqueNames = [...new Set([...session.people, ...action.payload.names])];
+      return { ...session, status: 'ready', people: uniqueNames,
+        chatHistory: [ ...session.chatHistory, { sender: 'user', text: action.payload.userInput }, { sender: 'bot', text: `Got it! I've added ${uniqueNames.join(', ')}. Now you can tell me who had what, or click on items to assign them directly.` }]
+      };
+    }
+    case 'SEND_MESSAGE_START':
+      return { ...session, status: 'assigning', chatHistory: [...session.chatHistory, { sender: 'user', text: action.payload.message }] };
+
+    case 'SEND_MESSAGE_SUCCESS': {
+      triggerHapticFeedback();
+      const { update, newPeople } = action.payload;
+      const oldAssignments = session.assignments;
+      const newAssignments = update.newAssignments;
+
+      const changedItemNames: string[] = [];
+      const allItemIds = new Set([...Object.keys(oldAssignments), ...Object.keys(newAssignments)]);
+
+      allItemIds.forEach(itemId => {
+          const oldNames = new Set(oldAssignments[itemId] || []);
+          const newNamesSet = new Set(newAssignments[itemId] || []);
+
+          if (oldNames.size !== newNamesSet.size || ![...oldNames].every(name => newNamesSet.has(name))) {
+              const item = session.parsedReceipt?.items.find(i => i.id === itemId);
+              if (item) changedItemNames.push(item.name);
+          }
+      });
+      
+      const newMessages: ChatMessage[] = [{ sender: 'bot', text: update.botResponse }];
+      if (changedItemNames.length > 0) {
+          newMessages.push({ sender: 'system', text: formatAssignmentUpdateMessage(changedItemNames) });
+      }
+
+      const updatedPeople = [...new Set([...session.people, ...newPeople])];
+      const newHistory = pushToHistory(oldAssignments, session.assignmentsHistory);
+
+      return { ...session, status: 'ready', assignments: newAssignments, assignmentsHistory: newHistory, people: updatedPeople, chatHistory: [...session.chatHistory, ...newMessages] };
+    }
+    
+    case 'SEND_MESSAGE_ERROR':
+      return { ...session, status: 'ready', chatHistory: [...session.chatHistory, { sender: 'system', text: `Error: ${action.payload.message}` }]};
+    
+    case 'DIRECT_ASSIGNMENT': {
+      triggerHapticFeedback();
+      const { itemId, newNames } = action.payload;
+      const item = session.parsedReceipt?.items.find(i => i.id === itemId);
+      if (!item) return session;
+      
+      const message = formatAssignmentMessage(item.name, newNames);
+      const newAssignments = { ...session.assignments, [itemId]: newNames };
+      const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
+      // Clear quantity assignments for this item if a direct assignment is made
+      const newQuantityAssignments = { ...session.quantityAssignments };
+      delete newQuantityAssignments[itemId];
+
+      return { ...session, assignments: newAssignments, quantityAssignments: newQuantityAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+    }
+
+    case 'EDIT_PERSON_NAME': {
+      const { oldName, newName } = action.payload;
+      const updatedPeople = session.people.map(p => p === oldName ? newName : p);
+      const updatedAssignments: Assignments = {};
+      for (const itemId in session.assignments) {
+        updatedAssignments[itemId] = session.assignments[itemId].map(p => p === oldName ? newName : p);
+      }
+      const updatedQuantityAssignments = { ...session.quantityAssignments };
+        for (const itemId in updatedQuantityAssignments) {
+            const newQuantities: { [person: string]: number } = {};
+            for (const person in updatedQuantityAssignments[itemId]) {
+                const newPersonName = person === oldName ? newName : person;
+                newQuantities[newPersonName] = updatedQuantityAssignments[itemId][person];
+            }
+            updatedQuantityAssignments[itemId] = newQuantities;
+        }
+      return { ...session, people: updatedPeople, assignments: updatedAssignments, quantityAssignments: updatedQuantityAssignments };
+    }
+    
+    case 'EDIT_ITEM': {
+        if (!session.parsedReceipt) return session;
+        const { itemId, newName, newPrice } = action.payload;
+        const newItems = session.parsedReceipt.items.map(item => {
+            if (item.id === itemId) {
+                return { ...item, name: newName, price: newPrice };
+            }
+            return item;
+        });
+        return {
+            ...session,
+            parsedReceipt: {
+                ...session.parsedReceipt,
+                items: newItems,
+            },
+        };
+    }
+
+     case 'ADD_ITEM': {
+      if (!session.parsedReceipt) return session;
+      const { name, price, quantity } = action.payload;
+      const newItem: ReceiptItem = {
+        id: `manual-item-${Date.now()}`,
+        name,
+        price,
+        quantity,
+      };
+      const newItems = [...session.parsedReceipt.items, newItem];
+      const newAssignments = { ...session.assignments, [newItem.id]: [] };
+      return {
+        ...session,
+        parsedReceipt: {
+          ...session.parsedReceipt,
+          items: newItems,
+        },
+        assignments: newAssignments,
+        chatHistory: [...session.chatHistory, { sender: 'system', text: `Added new item: ${name}` }]
+      };
+    }
+
+    case 'DELETE_ITEM': {
+      if (!session.parsedReceipt) return session;
+      const { itemId } = action.payload;
+      const itemToDelete = session.parsedReceipt.items.find(i => i.id === itemId);
+      if (!itemToDelete) return session;
+
+      const newItems = session.parsedReceipt.items.filter(item => item.id !== itemId);
+      const newAssignments = { ...session.assignments };
+      delete newAssignments[itemId];
+      const newQuantityAssignments = { ...session.quantityAssignments };
+      delete newQuantityAssignments[itemId];
+
+      return {
+        ...session,
+        parsedReceipt: {
+          ...session.parsedReceipt,
+          items: newItems,
+        },
+        assignments: newAssignments,
+        quantityAssignments: newQuantityAssignments,
+        chatHistory: [...session.chatHistory, { sender: 'system', text: `Deleted item: ${itemToDelete.name}` }]
+      };
+    }
+
+    case 'SET_QUANTITY_ASSIGNMENT': {
+        const { itemId, quantities } = action.payload;
+        const item = session.parsedReceipt?.items.find(i => i.id === itemId);
+        if (!item) return session;
+
+        const newQuantityAssignments = { ...session.quantityAssignments, [itemId]: quantities };
+        const newAssignedNames = Object.keys(quantities).filter(name => quantities[name] > 0);
+        const newAssignments = { ...session.assignments, [itemId]: newAssignedNames };
+        const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
+
+        return {
+            ...session,
+            assignments: newAssignments,
+            quantityAssignments: newQuantityAssignments,
+            assignmentsHistory: newHistory,
+            chatHistory: [...session.chatHistory, { sender: 'system', text: `Updated quantity split for ${item.name}.` }]
+        };
+    }
+    
+    case 'EDIT_TOTALS': {
+        if (!session.parsedReceipt) return session;
+        const { newSubtotal, newTax, newTip } = action.payload;
+        return {
+            ...session,
+            parsedReceipt: {
+                ...session.parsedReceipt,
+                subtotal: newSubtotal,
+                tax: newTax,
+                tip: newTip,
+            },
+        };
+    }
+
+    case 'ASSIGN_ALL_UNASSIGNED': {
+      triggerHapticFeedback();
+      const { personName } = action.payload;
+      if (!session.parsedReceipt) return session;
+
+      const newAssignments = { ...session.assignments };
+      let itemsAssignedCount = 0;
+
+      for (const item of session.parsedReceipt.items) {
+          if (!newAssignments[item.id] || newAssignments[item.id].length === 0) {
+              newAssignments[item.id] = [personName];
+              itemsAssignedCount++;
+          }
+      }
+      
+      if (itemsAssignedCount === 0) {
+          return { ...session, chatHistory: [...session.chatHistory, { sender: 'system', text: 'There were no unassigned items to assign.' }] };
+      }
+
+      const message = `Assigned the remaining ${itemsAssignedCount} items to ${personName}.`;
+      const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
+      return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+    }
+    
+    case 'SPLIT_ALL_EQUALLY': {
+      triggerHapticFeedback();
+      if (!session.parsedReceipt || session.people.length === 0) return session;
+
+      const newAssignments: Assignments = {};
+      for (const item of session.parsedReceipt.items) {
+          newAssignments[item.id] = [...session.people];
+      }
+
+      const message = `Split all items equally between ${session.people.length} people.`;
+      const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
+      return { ...session, assignments: newAssignments, quantityAssignments: {}, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+    }
+
+    case 'UNDO_LAST_ASSIGNMENT': {
+        if (session.assignmentsHistory.length === 0) {
+            return session;
+        }
+        triggerHapticFeedback();
+        const newHistory = [...session.assignmentsHistory];
+        const lastState = newHistory.pop();
+        // This is a simple undo, it doesn't restore quantity assignments complexity.
+        return {
+            ...session,
+            assignments: lastState!,
+            assignmentsHistory: newHistory,
+            chatHistory: [...session.chatHistory, { sender: 'system', text: 'Undid the last assignment action.'}]
+        };
+    }
+    
+    case 'CLEAR_CHAT_HISTORY': {
+        return { ...session, chatHistory: [{ sender: 'system', text: 'Chat history cleared.'}] };
+    }
+
+      case 'SPLIT_ITEM_EVENLY': {
+      const { itemId } = action.payload;
+      const item = session.parsedReceipt?.items.find(i => i.id === itemId);
+      if (!item || session.people.length === 0) return session;
+
+      triggerHapticFeedback();
+      const message = `Split ${item.name} evenly amongst everyone.`;
+      const newAssignments = { ...session.assignments, [itemId]: session.people };
+      const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
+      const newQuantityAssignments = { ...session.quantityAssignments };
+      delete newQuantityAssignments[itemId];
+      return { ...session, assignments: newAssignments, quantityAssignments: newQuantityAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+    }
+
+    case 'CLEAR_ITEM_ASSIGNMENT': {
+      const { itemId } = action.payload;
+      const item = session.parsedReceipt?.items.find(i => i.id === itemId);
+      if (!item) return session;
+
+      triggerHapticFeedback();
+      const message = `Cleared assignment for ${item.name}.`;
+      const newAssignments = { ...session.assignments, [itemId]: [] };
+      const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
+      const newQuantityAssignments = { ...session.quantityAssignments };
+      delete newQuantityAssignments[itemId];
+
+      return { ...session, assignments: newAssignments, quantityAssignments: newQuantityAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
+    }
+
+    default:
+      return session;
+  }
+}
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -108,206 +391,9 @@ function appReducer(state: AppState, action: AppAction): AppState {
 
         return {
             ...state,
-            sessions: state.sessions.map(session => {
-                if (session.id !== sessionId) return session;
-
-                const pushToHistory = (currentAssignments: Assignments, history: Assignments[]): Assignments[] => {
-                    const newHistory = [...history, currentAssignments];
-                    if (newHistory.length > MAX_UNDO_HISTORY) {
-                        newHistory.shift();
-                    }
-                    return newHistory;
-                };
-                
-                switch (action.type) {
-                  case 'RETRY_PARSING_START':
-                    return {
-                      ...session,
-                      status: 'parsing',
-                      errorMessage: null,
-                      chatHistory: [{ sender: 'system', text: 'Re-parsing receipt...' }],
-                    };
-                  case 'SET_PEOPLE': {
-                    const uniqueNames = [...new Set([...session.people, ...action.payload.names])];
-                    return { ...session, status: 'ready', people: uniqueNames,
-                      chatHistory: [ ...session.chatHistory, { sender: 'user', text: action.payload.userInput }, { sender: 'bot', text: `Got it! I've added ${uniqueNames.join(', ')}. Now you can tell me who had what, or click on items to assign them directly.` }]
-                    };
-                  }
-                  case 'SEND_MESSAGE_START':
-                    return { ...session, status: 'assigning', chatHistory: [...session.chatHistory, { sender: 'user', text: action.payload.message }] };
-
-                  case 'SEND_MESSAGE_SUCCESS': {
-                    triggerHapticFeedback();
-                    const { update, newPeople } = action.payload;
-                    const oldAssignments = session.assignments;
-                    const newAssignments = update.newAssignments;
-
-                    const changedItemNames: string[] = [];
-                    const allItemIds = new Set([...Object.keys(oldAssignments), ...Object.keys(newAssignments)]);
-
-                    allItemIds.forEach(itemId => {
-                        const oldNames = new Set(oldAssignments[itemId] || []);
-                        const newNamesSet = new Set(newAssignments[itemId] || []);
-
-                        if (oldNames.size !== newNamesSet.size || ![...oldNames].every(name => newNamesSet.has(name))) {
-                            const item = session.parsedReceipt?.items.find(i => i.id === itemId);
-                            if (item) changedItemNames.push(item.name);
-                        }
-                    });
-                    
-                    const newMessages: ChatMessage[] = [{ sender: 'bot', text: update.botResponse }];
-                    if (changedItemNames.length > 0) {
-                        newMessages.push({ sender: 'system', text: formatAssignmentUpdateMessage(changedItemNames) });
-                    }
-
-                    const updatedPeople = [...new Set([...session.people, ...newPeople])];
-                    const newHistory = pushToHistory(oldAssignments, session.assignmentsHistory);
-
-                    return { ...session, status: 'ready', assignments: newAssignments, assignmentsHistory: newHistory, people: updatedPeople, chatHistory: [...session.chatHistory, ...newMessages] };
-                  }
-                  
-                  case 'SEND_MESSAGE_ERROR':
-                    return { ...session, status: 'ready', chatHistory: [...session.chatHistory, { sender: 'system', text: `Error: ${action.payload.message}` }]};
-                  
-                  case 'DIRECT_ASSIGNMENT': {
-                    triggerHapticFeedback();
-                    const { itemId, newNames } = action.payload;
-                    const item = session.parsedReceipt?.items.find(i => i.id === itemId);
-                    if (!item) return session;
-                    
-                    const message = formatAssignmentMessage(item.name, newNames);
-                    const newAssignments = { ...session.assignments, [itemId]: newNames };
-                    const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
-                    return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
-                  }
-
-                  case 'EDIT_PERSON_NAME': {
-                    const { oldName, newName } = action.payload;
-                    const updatedPeople = session.people.map(p => p === oldName ? newName : p);
-                    const updatedAssignments: Assignments = {};
-                    for (const itemId in session.assignments) {
-                      updatedAssignments[itemId] = session.assignments[itemId].map(p => p === oldName ? newName : p);
-                    }
-                    return { ...session, people: updatedPeople, assignments: updatedAssignments };
-                  }
-                  
-                  case 'EDIT_ITEM': {
-                      if (!session.parsedReceipt) return session;
-                      const { itemId, newName, newPrice } = action.payload;
-                      const newItems = session.parsedReceipt.items.map(item => {
-                          if (item.id === itemId) {
-                              return { ...item, name: newName, price: newPrice };
-                          }
-                          return item;
-                      });
-                      return {
-                          ...session,
-                          parsedReceipt: {
-                              ...session.parsedReceipt,
-                              items: newItems,
-                          },
-                      };
-                  }
-                  
-                  case 'EDIT_TOTALS': {
-                      if (!session.parsedReceipt) return session;
-                      const { newSubtotal, newTax, newTip } = action.payload;
-                      return {
-                          ...session,
-                          parsedReceipt: {
-                              ...session.parsedReceipt,
-                              subtotal: newSubtotal,
-                              tax: newTax,
-                              tip: newTip,
-                          },
-                      };
-                  }
-
-                  case 'ASSIGN_ALL_UNASSIGNED': {
-                    triggerHapticFeedback();
-                    const { personName } = action.payload;
-                    if (!session.parsedReceipt) return session;
-
-                    const newAssignments = { ...session.assignments };
-                    let itemsAssignedCount = 0;
-
-                    for (const item of session.parsedReceipt.items) {
-                        if (!newAssignments[item.id] || newAssignments[item.id].length === 0) {
-                            newAssignments[item.id] = [personName];
-                            itemsAssignedCount++;
-                        }
-                    }
-                    
-                    if (itemsAssignedCount === 0) {
-                        return { ...session, chatHistory: [...session.chatHistory, { sender: 'system', text: 'There were no unassigned items to assign.' }] };
-                    }
-
-                    const message = `Assigned the remaining ${itemsAssignedCount} items to ${personName}.`;
-                    const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
-                    return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
-                  }
-                  
-                  case 'SPLIT_ALL_EQUALLY': {
-                    triggerHapticFeedback();
-                    if (!session.parsedReceipt || session.people.length === 0) return session;
-
-                    const newAssignments: Assignments = {};
-                    for (const item of session.parsedReceipt.items) {
-                        newAssignments[item.id] = [...session.people];
-                    }
-
-                    const message = `Split all items equally between ${session.people.length} people.`;
-                    const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
-                    return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
-                  }
-
-                  case 'UNDO_LAST_ASSIGNMENT': {
-                      if (session.assignmentsHistory.length === 0) {
-                          return session;
-                      }
-                      triggerHapticFeedback();
-                      const newHistory = [...session.assignmentsHistory];
-                      const lastState = newHistory.pop();
-                      return {
-                          ...session,
-                          assignments: lastState!,
-                          assignmentsHistory: newHistory,
-                          chatHistory: [...session.chatHistory, { sender: 'system', text: 'Undid the last assignment action.'}]
-                      };
-                  }
-                  
-                  case 'CLEAR_CHAT_HISTORY': {
-                      return { ...session, chatHistory: [{ sender: 'system', text: 'Chat history cleared.'}] };
-                  }
-
-                   case 'SPLIT_ITEM_EVENLY': {
-                    const { itemId } = action.payload;
-                    const item = session.parsedReceipt?.items.find(i => i.id === itemId);
-                    if (!item || session.people.length === 0) return session;
-
-                    triggerHapticFeedback();
-                    const message = `Split ${item.name} evenly amongst everyone.`;
-                    const newAssignments = { ...session.assignments, [itemId]: session.people };
-                    const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
-                    return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
-                  }
-
-                  case 'CLEAR_ITEM_ASSIGNMENT': {
-                    const { itemId } = action.payload;
-                    const item = session.parsedReceipt?.items.find(i => i.id === itemId);
-                    if (!item) return session;
-
-                    triggerHapticFeedback();
-                    const message = `Cleared assignment for ${item.name}.`;
-                    const newAssignments = { ...session.assignments, [itemId]: [] };
-                    const newHistory = pushToHistory(session.assignments, session.assignmentsHistory);
-                    return { ...session, assignments: newAssignments, assignmentsHistory: newHistory, chatHistory: [...session.chatHistory, { sender: 'system', text: message }] };
-                  }
-
-                  default:
-                    return session;
-                }
-            })
+            sessions: state.sessions.map(session => 
+              session.id === sessionId ? sessionReducer(session, action) : session
+            ),
         };
     }
   }
@@ -342,6 +428,14 @@ const App: React.FC = () => {
         const savedState = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (savedState) {
             const parsedState = JSON.parse(savedState);
+            // Ensure loaded sessions have the new quantityAssignments field
+            if (parsedState.sessions) {
+                parsedState.sessions.forEach((s: ReceiptSession) => {
+                    if (!s.quantityAssignments) {
+                        s.quantityAssignments = {};
+                    }
+                });
+            }
             dispatch({ type: 'LOAD_SESSIONS', payload: parsedState });
         }
     } catch (error) {
@@ -409,58 +503,11 @@ const App: React.FC = () => {
     calculateBillSummary(
       activeSession?.parsedReceipt ?? null, 
       activeSession?.assignments ?? {}, 
-      activeSession?.people ?? []
+      activeSession?.people ?? [],
+      activeSession?.quantityAssignments ?? {}
     ), 
-    [activeSession?.parsedReceipt, activeSession?.assignments, activeSession?.people]
+    [activeSession?.parsedReceipt, activeSession?.assignments, activeSession?.people, activeSession?.quantityAssignments]
   );
-
-  const fileToBase64 = (file: File): Promise<[string, string]> => {
-    return new Promise((resolve, reject) => {
-        const objectUrl = URL.createObjectURL(file);
-        const img = new Image();
-        img.onload = () => {
-          try {
-            const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 1920; // Max width for the compressed image, good balance of quality and size
-            const QUALITY = 0.9; // JPEG quality
-
-            let { width, height } = img;
-
-            // Resize if the image is too large, maintaining aspect ratio
-            if (width > MAX_WIDTH) {
-              height = (MAX_WIDTH / width) * height;
-              width = MAX_WIDTH;
-            }
-
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-
-            if (!ctx) {
-              return reject(new Error('Failed to get canvas context for image compression.'));
-            }
-
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            // Get the compressed image data URL as a JPEG
-            const dataUrl = canvas.toDataURL('image/jpeg', QUALITY);
-            const base64 = dataUrl.split(',')[1];
-            
-            resolve([base64, 'image/jpeg']);
-          } catch (e) {
-              reject(e);
-          } finally {
-             // Clean up the object URL to avoid memory leaks
-             URL.revokeObjectURL(objectUrl);
-          }
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(objectUrl);
-          reject(new Error("Failed to load image. The file may be corrupt or in an unsupported format. Please try a standard image format like JPEG or PNG."));
-        };
-        img.src = objectUrl;
-    });
-  };
 
   const handleAddReceipts = useCallback(async (files: FileList) => {
     const newSessions: ReceiptSession[] = [];
@@ -471,7 +518,7 @@ const App: React.FC = () => {
         const id = i === 0 ? firstId : `session-${Date.now()}-${Math.random()}`;
         newSessions.push({
             id: id, name: file.name, status: 'parsing', errorMessage: null,
-            parsedReceipt: null, receiptImage: null, assignments: {}, assignmentsHistory: [], chatHistory: [], people: []
+            parsedReceipt: null, receiptImage: null, assignments: {}, quantityAssignments: {}, assignmentsHistory: [], chatHistory: [], people: []
         });
     }
 
@@ -532,7 +579,7 @@ const App: React.FC = () => {
     dispatch({ type: 'SEND_MESSAGE_START', payload: { sessionId: activeSession.id, message } });
     try {
       triggerHapticFeedback();
-      const update = await updateAssignments(message, activeSession.parsedReceipt.items, activeSession.assignments);
+      const update = await updateAssignments(message, activeSession.parsedReceipt.items, activeSession.assignments, activeSession.chatHistory);
       const updatedPeopleSet = new Set(activeSession.people);
       Object.values(update.newAssignments).flat().forEach(name => updatedPeopleSet.add(name));
       const newPeople = Array.from(updatedPeopleSet);
@@ -596,6 +643,21 @@ const App: React.FC = () => {
     addToast(`Renamed '${oldName}' to '${trimmedNewName}'.`, 'success');
   }, [activeSession, addToast]);
   
+  const handleAddItem = useCallback((name: string, price: number, quantity: number) => {
+      if (!activeSession) return;
+      dispatch({ type: 'ADD_ITEM', payload: { sessionId: activeSession.id, name, price, quantity } });
+  }, [activeSession]);
+
+  const handleDeleteItem = useCallback((itemId: string) => {
+      if (!activeSession) return;
+      dispatch({ type: 'DELETE_ITEM', payload: { sessionId: activeSession.id, itemId } });
+  }, [activeSession]);
+
+  const handleSetQuantityAssignment = useCallback((itemId: string, quantities: { [person: string]: number }) => {
+      if (!activeSession) return;
+      dispatch({ type: 'SET_QUANTITY_ASSIGNMENT', payload: { sessionId: activeSession.id, itemId, quantities } });
+  }, [activeSession]);
+
   const handleEditItem = useCallback((itemId: string, newName: string, newPrice: number) => {
       if (!activeSession) return;
       dispatch({ type: 'EDIT_ITEM', payload: { sessionId: activeSession.id, itemId, newName, newPrice } });
@@ -616,7 +678,7 @@ const App: React.FC = () => {
     dispatch({ type: 'SPLIT_ALL_EQUALLY', payload: { sessionId: activeSession.id } });
   }, [activeSession]);
   
-  const handleSplitItem = useCallback((itemId: string) => {
+  const handleSplitItemEvenly = useCallback((itemId: string) => {
       if (!activeSession) return;
       dispatch({ type: 'SPLIT_ITEM_EVENLY', payload: { sessionId: activeSession.id, itemId } });
   }, [activeSession]);
@@ -711,19 +773,19 @@ const App: React.FC = () => {
         {activeSession.status === 'parsing' && <ReceiptSkeleton />}
         {activeSession.parsedReceipt && (
             <ReceiptDisplay
-                receipt={activeSession.parsedReceipt}
-                assignments={activeSession.assignments}
-                people={activeSession.people}
-                receiptImage={activeSession.receiptImage}
+                session={activeSession}
                 isUndoable={activeSession.assignmentsHistory.length > 0}
                 onUpdateAssignment={handleDirectAssignment}
                 onAssignAllUnassigned={handleAssignAllUnassigned}
                 onSplitAllEqually={handleSplitAllEqually}
                 onUndoLastAssignment={handleUndoLastAssignment}
                 isInteractive={activeSession.status === 'ready'}
+                onAddItem={handleAddItem}
+                onDeleteItem={handleDeleteItem}
+                onSetQuantityAssignment={handleSetQuantityAssignment}
                 onEditItem={handleEditItem}
                 onEditTotals={handleEditTotals}
-                onSplitItem={handleSplitItem}
+                onSplitItemEvenly={handleSplitItemEvenly}
                 onClearItem={handleClearItem}
             />
         )}

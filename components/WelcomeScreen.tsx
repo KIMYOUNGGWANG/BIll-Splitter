@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface WelcomeScreenProps {
@@ -30,7 +29,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onUploadClick }) => {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-4 sm:p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark overflow-y-auto">
+    <div className="flex flex-col items-center justify-start h-full text-center p-4 sm:p-8 bg-surface dark:bg-surface-dark rounded-lg shadow-md border border-border dark:border-border-dark overflow-y-auto">
       <div className="flex-grow flex flex-col items-center justify-center">
         <div className="text-6xl mb-4">📄✨</div>
         <h2 className="text-3xl sm:text-4xl font-bold mb-3 text-text-primary dark:text-text-primary-dark">Welcome to Splitly AI</h2>

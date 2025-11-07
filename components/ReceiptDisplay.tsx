@@ -1,130 +1,13 @@
 
-import React, { useState, useMemo, useCallback, useRef, TouchEvent } from 'react';
-import { ParsedReceipt, Assignments, ReceiptItem } from '../types';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { ParsedReceipt, Assignments, ReceiptItem, ReceiptSession } from '../types';
 import ConfirmationModal from './ConfirmationModal';
 import ImageZoomModal from './ImageZoomModal';
 import EditableField from './EditableField';
+import AddItemModal from './AddItemModal';
+import QuantitySplitModal from './QuantitySplitModal';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
 import { useFocusTrap } from '../hooks/useFocusTrap';
-
-const SWIPE_THRESHOLD = 60; // Pixels
-const SWIPE_MAX_TRANSLATE = 140; // Total width of action buttons
-
-interface SwipeableReceiptItemProps {
-  children: React.ReactNode;
-  onSplit: () => void;
-  onClear: () => void;
-  isInteractive: boolean;
-}
-
-const SwipeableReceiptItem: React.FC<SwipeableReceiptItemProps> = ({ children, onSplit, onClear, isInteractive }) => {
-  const [translateX, setTranslateX] = useState(0);
-  const [isSwiped, setIsSwiped] = useState(false);
-  const startX = useRef(0);
-  const isDragging = useRef(false);
-
-  const resetSwipe = useCallback(() => {
-    setTranslateX(0);
-    setIsSwiped(false);
-  }, []);
-
-  const handleDragEnd = useCallback(() => {
-    if (!isDragging.current) return;
-    isDragging.current = false;
-
-    if (translateX < -SWIPE_THRESHOLD) {
-      setTranslateX(-SWIPE_MAX_TRANSLATE);
-      setIsSwiped(true);
-    } else {
-      resetSwipe();
-    }
-  }, [translateX, resetSwipe]);
-  
-  const handleMouseMove = useCallback((e: globalThis.MouseEvent) => {
-    if (!isDragging.current || !isInteractive) return;
-    const currentX = e.clientX;
-    const deltaX = currentX - startX.current;
-    
-    if (deltaX < 0) { // Only allow left swipe
-        setTranslateX(Math.max(deltaX, -SWIPE_MAX_TRANSLATE - 20)); // Allow some overdrag
-    }
-  }, [isInteractive]);
-
-  const handleMouseUp = useCallback(() => {
-      if (!isDragging.current) return;
-      isDragging.current = false;
-      
-      if (translateX < -SWIPE_THRESHOLD) {
-        setTranslateX(-SWIPE_MAX_TRANSLATE);
-        setIsSwiped(true);
-      } else {
-        resetSwipe();
-      }
-      
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-  }, [translateX, resetSwipe, handleMouseMove]);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!isInteractive || e.button !== 0) return; // Only for left click
-    startX.current = e.clientX;
-    isDragging.current = true;
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  const handleTouchStart = (e: TouchEvent) => {
-    if (!isInteractive) return;
-    startX.current = e.touches[0].clientX;
-    isDragging.current = true;
-  };
-
-  const handleTouchMove = (e: TouchEvent) => {
-    if (!isDragging.current || !isInteractive) return;
-    const currentX = e.touches[0].clientX;
-    const deltaX = currentX - startX.current;
-    
-    if (deltaX < 0) { // Only allow left swipe
-        setTranslateX(Math.max(deltaX, -SWIPE_MAX_TRANSLATE - 20)); // Allow some overdrag
-    }
-  };
-
-  const handleTouchEnd = () => {
-    handleDragEnd();
-  };
-  
-  const handleAction = (action: 'split' | 'clear') => {
-      if (action === 'split') onSplit();
-      if (action === 'clear') onClear();
-      resetSwipe();
-  }
-
-  return (
-    <div className="relative overflow-hidden rounded-md">
-        <div className="absolute top-0 right-0 h-full flex items-center z-0">
-            <button onClick={() => handleAction('split')} className="h-full px-4 bg-blue-500 text-white flex flex-col items-center justify-center transition-colors hover:bg-blue-600">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M7.25 2a.75.75 0 0 0-1.5 0v1.559a2.25 2.25 0 0 0-1.22.453L3.155 3.155a.75.75 0 0 0-1.06 1.06l.858.858A2.25 2.25 0 0 0 2 6.293V4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .75.75h3.5a.75.75 0 0 0 0-1.5H3.207a2.249 2.249 0 0 0 1.22-.453l.858.858a.75.75 0 0 0 1.06-1.06l-.858-.858A2.25 2.25 0 0 0 6.293 5H7.85a.75.75 0 0 0 0-1.5H6.293A2.249 2.249 0 0 0 5 3.207V2.75a.75.75 0 0 0 1.5 0V4.31a2.25 2.25 0 0 0 .453 1.22l.858.858a.75.75 0 0 0 1.06-1.06l-.858-.858A2.25 2.25 0 0 0 7.25 3.207V2ZM8.75 8a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 0 1.5H9.793a2.249 2.249 0 0 1-1.22.453l-.858-.858a.75.75 0 0 1-1.06 1.06l.858.858A2.25 2.25 0 0 1 8.146 11h-1.56a.75.75 0 0 1 0-1.5h1.56a2.249 2.249 0 0 1 1.22-.453l.858-.858a.75.75 0 0 1 1.06-1.06l-.858.858A2.25 2.25 0 0 1 9.707 9H11.25a.75.75 0 0 1 .75.75v1.559a2.25 2.25 0 0 1 1.22-.453l1.375.858a.75.75 0 0 1-.53 1.408l-1.375-.858a2.25 2.25 0 0 1-1.22.453V13.25a.75.75 0 0 1-1.5 0v-1.56a2.25 2.25 0 0 1-.453-1.22l-.858-.858a.75.75 0 0 1 1.06-1.06l.858.858A2.25 2.25 0 0 1 11.25 8h.75Z" /></svg>
-                <span className="text-xs mt-1">Split</span>
-            </button>
-            <button onClick={() => handleAction('clear')} className="h-full px-4 bg-red-500 text-white flex flex-col items-center justify-center transition-colors hover:bg-red-600">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M5.75 3a.75.75 0 0 0-1.5 0v1.5H2.5a.75.75 0 0 0 0 1.5h1.75v1.5a.75.75 0 0 0 1.5 0v-1.5h1.5a.75.75 0 0 0 0-1.5h-1.5V3Zm4.5 0a.75.75 0 0 0-1.5 0v1.5H7a.75.75 0 0 0 0 1.5h1.75v1.5a.75.75 0 0 0 1.5 0v-1.5h1.5a.75.75 0 0 0 0-1.5h-1.5V3Z" clipRule="evenodd" /><path d="M2 10a2 2 0 0 0-2 2v.25a.75.75 0 0 0 1.5 0V12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 .5.5v.25a.75.75 0 0 0 1.5 0V12a2 2 0 0 0-2-2H2Z" /></svg>
-                <span className="text-xs mt-1">Clear</span>
-            </button>
-        </div>
-      <div
-        className="relative z-10 touch-pan-y"
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        style={{ transform: `translateX(${translateX}px)`, transition: isDragging.current ? 'none' : 'transform 0.2s ease-out', cursor: isInteractive ? 'grab' : 'default' }}
-      >
-        {children}
-      </div>
-    </div>
-  );
-};
-
 
 interface ReceiptItemViewProps {
   item: ReceiptItem;
@@ -137,8 +20,9 @@ interface ReceiptItemViewProps {
   onCancelEdit: () => void;
   onZoomRequest: () => void;
   onEditItem: (itemId: string, newName: string, newPrice: number) => void;
-  onSplitItem: (itemId: string) => void;
+  onSplitItemRequest: (item: ReceiptItem) => void;
   onClearItem: (itemId: string) => void;
+  onDeleteItem: (itemId: string) => void;
 }
 
 const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
@@ -152,11 +36,13 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
   onCancelEdit,
   onZoomRequest,
   onEditItem,
-  onSplitItem,
+  onSplitItemRequest,
   onClearItem,
+  onDeleteItem,
 }) => {
   const [selectedNames, setSelectedNames] = useState<string[]>([]);
   const [isUnassignConfirmOpen, setIsUnassignConfirmOpen] = useState(false);
+  const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   
   const isEditing = editingItemId === item.id;
   
@@ -187,59 +73,90 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
     onUpdateAssignment(item.id, []);
     setIsUnassignConfirmOpen(false);
   }, [item.id, onUpdateAssignment]);
+
+  const handleConfirmDelete = useCallback(() => {
+    onDeleteItem(item.id);
+    setDeleteConfirmOpen(false);
+  }, [item.id, onDeleteItem]);
   
   return (
     <>
-      <SwipeableReceiptItem onSplit={() => onSplitItem(item.id)} onClear={() => onClearItem(item.id)} isInteractive={isInteractive && !isEditing}>
-        <div className={`p-3 border border-border dark:border-border-dark transition-all duration-300 bg-surface dark:bg-surface-dark ${isEditing ? 'bg-primary/5 dark:bg-primary-dark/10 ring-2 ring-primary dark:ring-primary-dark rounded-md' : ''} ${isAssigned && !isEditing ? 'opacity-70' : ''}`}>
+      <div className={`transition-all duration-300 bg-surface dark:bg-slate-800 rounded-lg shadow-sm ${isEditing ? 'ring-2 ring-primary dark:ring-primary-dark' : 'border border-transparent'}`}>
+        <div className="flex items-stretch min-h-[76px]">
+          {/* Left Side: Info */}
           <div 
-            className="flex justify-between items-start gap-2"
+            className={`flex-grow p-3 rounded-l-lg transition-opacity ${isAssigned && !isEditing ? 'opacity-70' : ''}`}
             role="button"
-            tabIndex={isInteractive ? 0 : -1}
-            onClick={onZoomRequest}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onZoomRequest()}
+            tabIndex={isInteractive && !isEditing ? 0 : -1}
+            onClick={!isEditing && isInteractive ? onZoomRequest : undefined}
+            onKeyDown={(e) => !isEditing && isInteractive && (e.key === 'Enter' || e.key === ' ') && onZoomRequest()}
             aria-label={`Zoom on ${item.name}`}
+            style={{ cursor: isInteractive && !isEditing ? 'pointer' : 'default' }}
           >
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-                <div 
-                    className={`w-2 h-2 rounded-full flex-shrink-0 ${isAssigned ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-500'}`}
-                    title={isAssigned ? 'Assigned' : 'Unassigned'}
-                ></div>
+            <div className="flex items-start gap-2">
+              <div 
+                  className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5 ${isAssigned ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-500'}`}
+                  title={isAssigned ? 'Assigned' : 'Unassigned'}
+              ></div>
+              <div className="flex-grow">
                 <EditableField
                   initialValue={item.name}
                   onSave={(newName) => onEditItem(item.id, newName, item.price)}
                   isInteractive={isInteractive}
-                  className="font-semibold text-text-primary dark:text-text-primary-dark"
+                  className="font-bold text-text-primary dark:text-slate-100"
                   ariaLabel={`Edit item name for ${item.name}`}
                 />
-                {item.quantity > 1 && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-text-secondary dark:text-text-secondary-dark text-sm">(x{item.quantity})</span>
-                    {isInteractive && (
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); onSplitItem(item.id); }}
-                            className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50 px-1.5 py-0.5 rounded-md hover:bg-blue-200 dark:hover:bg-blue-900"
-                            aria-label={`Split ${item.name} evenly`}
-                        >
-                            Split
-                        </button>
-                    )}
-                  </div>
-                )}
+              </div>
+               {isInteractive && (
+                <button 
+                  onClick={() => setDeleteConfirmOpen(true)}
+                  className="p-1 -mr-1 -mt-1 rounded-full text-text-secondary dark:text-text-secondary-dark hover:bg-red-100 dark:hover:bg-red-900/50 hover:text-red-600 dark:hover:text-red-400 opacity-50 hover:opacity-100 focus:opacity-100 transition-all"
+                  aria-label={`Delete item ${item.name}`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5a.75.75 0 0 1 .786-.711Z" clipRule="evenodd" /></svg>
+                </button>
+              )}
             </div>
-             <EditableField
-              initialValue={item.price}
-              onSave={(newPrice) => onEditItem(item.id, item.name, parseFloat(newPrice))}
-              isInteractive={isInteractive}
-              type="number"
-              formatter={formatCurrency}
-              className="font-mono text-text-primary dark:text-text-primary-dark flex-shrink-0"
-              ariaLabel={`Edit price for ${item.name}`}
-            />
+            <div className="text-sm font-medium mt-1 flex items-center pl-[18px]">
+              <span className="text-text-secondary dark:text-slate-400 mr-1">Assigned:</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleEdit(); }}
+                disabled={!isInteractive}
+                className={`text-left p-1 -ml-1 rounded transition-colors disabled:cursor-default ${isInteractive ? 'text-primary dark:text-purple-300 hover:bg-primary/10 dark:hover:bg-purple-300/10 cursor-pointer font-semibold' : 'text-text-secondary dark:text-slate-400'}`}
+                aria-label={`Edit assignment for ${item.name}. Currently assigned to: ${getAssignedNamesText()}`}
+                aria-expanded={isEditing}
+                aria-controls={`edit-assignment-${item.id}`}
+              >
+                {getAssignedNamesText()}
+              </button>
+            </div>
           </div>
 
-          {isEditing ? (
-            <div className="mt-2 animate-fade-in" id={`edit-assignment-${item.id}`}>
+          {/* Right Side: Actions */}
+          {isInteractive && !isEditing && (
+            <div className="flex-shrink-0 flex rounded-r-lg overflow-hidden">
+              <button onClick={(e) => { e.stopPropagation(); onSplitItemRequest(item); }} className="w-[70px] bg-blue-600 text-white flex flex-col items-center justify-center transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-inset">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5"><path d="M7.25 2a.75.75 0 0 0-1.5 0v1.559a2.25 2.25 0 0 0-1.22.453L3.155 3.155a.75.75 0 0 0-1.06 1.06l.858.858A2.25 2.25 0 0 0 2 6.293V4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .75.75h3.5a.75.75 0 0 0 0-1.5H3.207a2.249 2.249 0 0 0 1.22-.453l.858.858a.75.75 0 0 0 1.06-1.06l-.858-.858A2.25 2.25 0 0 0 6.293 5H7.85a.75.75 0 0 0 0-1.5H6.293A2.249 2.249 0 0 0 5 3.207V2.75a.75.75 0 0 0 1.5 0V4.31a2.25 2.25 0 0 0 .453 1.22l.858.858a.75.75 0 0 0 1.06-1.06l-.858-.858A2.25 2.25 0 0 0 7.25 3.207V2ZM8.75 8a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 0 1.5H9.793a2.249 2.249 0 0 1-1.22.453l-.858-.858a.75.75 0 0 1-1.06 1.06l.858.858A2.25 2.25 0 0 1 8.146 11h-1.56a.75.75 0 0 1 0-1.5h1.56a2.249 2.249 0 0 1 1.22-.453l.858-.858a.75.75 0 0 1 1.06-1.06l-.858.858A2.25 2.25 0 0 1 9.707 9H11.25a.75.75 0 0 1 .75.75v1.559a2.25 2.25 0 0 1 1.22-.453l1.375.858a.75.75 0 0 1-.53 1.408l-1.375-.858a2.25 2.25 0 0 1-1.22.453V13.25a.75.75 0 0 1-1.5 0v-1.56a2.25 2.25 0 0 1-.453-1.22l-.858-.858a.75.75 0 0 1 1.06-1.06l.858.858A2.25 2.25 0 0 1 11.25 8h.75Z" /></svg>
+                  <span className="text-xs mt-1 font-semibold">Split</span>
+              </button>
+              <div className="w-[80px] bg-red-700/80 text-white flex flex-col items-center justify-center">
+                 <EditableField
+                    initialValue={item.price}
+                    onSave={(newPrice) => onEditItem(item.id, item.name, parseFloat(newPrice))}
+                    isInteractive={isInteractive}
+                    type="number"
+                    formatter={formatCurrency}
+                    className="font-mono text-slate-100 text-lg text-center"
+                    ariaLabel={`Edit price for ${item.name}`}
+                  />
+                  <button onClick={(e) => { e.stopPropagation(); onClearItem(item.id); }} className="text-xs mt-1 text-red-300 hover:text-white font-semibold focus:outline-none focus:underline">Clear</button>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {isEditing && (
+          <div className="animate-fade-in p-3 border-t border-border dark:border-slate-700" id={`edit-assignment-${item.id}`}>
               <fieldset>
                  <div className="flex justify-between items-center mb-1">
                     <legend className="text-sm font-medium text-text-secondary dark:text-text-secondary-dark">Assign to:</legend>
@@ -266,8 +183,8 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
                        <span
                         className="ml-2 text-text-primary dark:text-text-primary-dark flex-grow"
                         onClick={(e) => {
-                          e.preventDefault(); // Prevents label from toggling checkbox
-                          setSelectedNames([person]); // Assigns to only this person
+                          e.preventDefault();
+                          setSelectedNames([person]);
                         }}
                       >
                         {person}
@@ -289,23 +206,8 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="text-xs font-medium mt-1 flex items-center">
-              <span className="text-text-secondary dark:text-text-secondary-dark mr-1">Assigned:</span>
-              <button
-                onClick={handleEdit}
-                disabled={!isInteractive}
-                className={`text-left p-1 -ml-1 rounded transition-colors disabled:cursor-default ${isInteractive ? 'text-primary dark:text-primary-dark hover:bg-primary/10 dark:hover:bg-primary-dark/10 cursor-pointer' : 'text-text-secondary dark:text-text-secondary-dark'}`}
-                aria-label={`Edit assignment for ${item.name}. Currently assigned to: ${getAssignedNamesText()}`}
-                aria-expanded={isEditing}
-                aria-controls={`edit-assignment-${item.id}`}
-              >
-                {getAssignedNamesText()}
-              </button>
-            </div>
-          )}
-        </div>
-      </SwipeableReceiptItem>
+        )}
+      </div>
       <ConfirmationModal
           isOpen={isUnassignConfirmOpen}
           onClose={() => setIsUnassignConfirmOpen(false)}
@@ -314,33 +216,44 @@ const ReceiptItemView: React.FC<ReceiptItemViewProps> = React.memo(({
           message={`Are you sure you want to unassign "${item.name}" from everyone?`}
           variant="destructive"
       />
+      <ConfirmationModal
+          isOpen={isDeleteConfirmOpen}
+          onClose={() => setDeleteConfirmOpen(false)}
+          onConfirm={handleConfirmDelete}
+          title="Delete Item"
+          message={`Are you sure you want to permanently delete "${item.name}"? This action cannot be undone.`}
+          variant="destructive"
+      />
     </>
   );
 });
 
 
 interface ReceiptDisplayProps {
-  receipt: ParsedReceipt;
-  assignments: Assignments;
-  people: string[];
-  receiptImage: string | null;
+  session: ReceiptSession;
   isUndoable: boolean;
   onUpdateAssignment: (itemId: string, newNames: string[]) => void;
   onAssignAllUnassigned: (personName: string) => void;
   onSplitAllEqually: () => void;
   onUndoLastAssignment: () => void;
   isInteractive: boolean;
+  onAddItem: (name: string, price: number, quantity: number) => void;
+  onDeleteItem: (itemId: string) => void;
+  onSetQuantityAssignment: (itemId: string, quantities: { [person: string]: number }) => void;
   onEditItem: (itemId: string, newName: string, newPrice: number) => void;
   onEditTotals: (newSubtotal: number, newTax: number, newTip: number) => void;
-  onSplitItem: (itemId: string) => void;
+  onSplitItemEvenly: (itemId: string) => void;
   onClearItem: (itemId: string) => void;
 }
 
-const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, people, receiptImage, isUndoable, onUpdateAssignment, onAssignAllUnassigned, onSplitAllEqually, onUndoLastAssignment, isInteractive, onEditItem, onEditTotals, onSplitItem, onClearItem }) => {
+const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ session, isUndoable, onUpdateAssignment, onAssignAllUnassigned, onSplitAllEqually, onUndoLastAssignment, isInteractive, onAddItem, onDeleteItem, onSetQuantityAssignment, onEditItem, onEditTotals, onSplitItemEvenly, onClearItem }) => {
+  const { parsedReceipt: receipt, assignments, people, receiptImage, quantityAssignments } = session;
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [isAssignAllModalOpen, setIsAssignAllModalOpen] = useState(false);
   const [isSplitAllModalOpen, setIsSplitAllModalOpen] = useState(false);
   const [isZoomModalOpen, setZoomModalOpen] = useState(false);
+  const [isAddItemModalOpen, setAddItemModalOpen] = useState(false);
+  const [itemForQuantitySplit, setItemForQuantitySplit] = useState<ReceiptItem | null>(null);
   const [selectedPersonForAssignAll, setSelectedPersonForAssignAll] = useState<string>('');
   const [filterQuery, setFilterQuery] = useState('');
   const [isItemListVisible, setIsItemListVisible] = useState(true);
@@ -370,6 +283,28 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
   const handleCancelEdit = useCallback(() => {
     setEditingItemId(null);
   }, []);
+
+  const handleAddItemConfirm = (name: string, price: number, quantity: number) => {
+    onAddItem(name, price, quantity);
+    setAddItemModalOpen(false);
+  };
+
+  const handleQuantitySplitSave = (quantities: { [person: string]: number }) => {
+    if (itemForQuantitySplit) {
+      onSetQuantityAssignment(itemForQuantitySplit.id, quantities);
+    }
+    setItemForQuantitySplit(null);
+  };
+
+  const handleSplitItemRequest = (item: ReceiptItem) => {
+    if (people.length === 0) return;
+    if (item.quantity > 1) {
+        setItemForQuantitySplit(item);
+    } else {
+        // For items with quantity 1, just split evenly
+        onSplitItemEvenly(item.id);
+    }
+  };
   
   const hasUnassignedItems = useMemo(() => 
     receipt.items.some(item => !assignments[item.id] || assignments[item.id].length === 0),
@@ -403,6 +338,12 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
                   </svg>
                 </div>
               <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
+                  {isInteractive && (
+                    <button onClick={() => setAddItemModalOpen(true)} className="px-2 py-1 text-xs font-semibold text-primary dark:text-primary-dark bg-primary/10 dark:bg-primary-dark/10 hover:bg-primary/20 dark:hover:bg-primary-dark/20 rounded-md transition-colors flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" /></svg>
+                        Add Item
+                    </button>
+                  )}
                   {isInteractive && (
                       <button 
                           onClick={onUndoLastAssignment}
@@ -471,8 +412,9 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
                             onCancelEdit={handleCancelEdit}
                             onZoomRequest={() => setZoomModalOpen(true)}
                             onEditItem={onEditItem}
-                            onSplitItem={onSplitItem}
+                            onSplitItemRequest={handleSplitItemRequest}
                             onClearItem={onClearItem}
+                            onDeleteItem={onDeleteItem}
                           />
                         ))}
                         {filteredItems.length === 0 && (
@@ -594,6 +536,21 @@ const ReceiptDisplay: React.FC<ReceiptDisplayProps> = ({ receipt, assignments, p
             onClose={() => setZoomModalOpen(false)}
             imageUrl={receiptImage}
         />
+        <AddItemModal
+            isOpen={isAddItemModalOpen}
+            onClose={() => setAddItemModalOpen(false)}
+            onConfirm={handleAddItemConfirm}
+        />
+        {itemForQuantitySplit && (
+            <QuantitySplitModal
+                isOpen={!!itemForQuantitySplit}
+                onClose={() => setItemForQuantitySplit(null)}
+                onSave={handleQuantitySplitSave}
+                item={itemForQuantitySplit}
+                people={people}
+                currentQuantities={quantityAssignments?.[itemForQuantitySplit.id] || {}}
+            />
+        )}
     </>
   );
 };

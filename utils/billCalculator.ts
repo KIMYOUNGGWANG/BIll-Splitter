@@ -1,10 +1,11 @@
 
-import type { ParsedReceipt, Assignments, PersonTotal, BillSummary } from '../types';
+import type { ParsedReceipt, Assignments, PersonTotal, BillSummary, ReceiptSession } from '../types';
 
 export function calculateBillSummary(
   receipt: ParsedReceipt | null,
   currentAssignments: Assignments,
-  peopleList: string[]
+  peopleList: string[],
+  quantityAssignments: ReceiptSession['quantityAssignments']
 ): BillSummary {
   if (!receipt) return [];
 
@@ -18,34 +19,56 @@ export function calculateBillSummary(
     personTotals[name] = { name, items: [], subtotal: 0, tax: 0, tip: 0, total: 0 };
   });
 
-  // Calculate item costs for assigned people
-  Object.entries(currentAssignments).forEach(([itemId, names]) => {
-    if (names.length > 0) {
-      const item = receipt.items.find(i => i.id === itemId);
-      if (!item) return;
+  // Calculate item costs
+  receipt.items.forEach(item => {
+    const quantitySplit = quantityAssignments[item.id];
+    const simpleSplit = currentAssignments[item.id];
 
-      const pricePerPerson = item.price / names.length;
+    if (quantitySplit && Object.keys(quantitySplit).length > 0) {
+      // Logic for quantity-based split
+      const totalAssignedQuantity = Object.values(quantitySplit).reduce((sum, q) => sum + q, 0);
+      if (totalAssignedQuantity === 0) return; // Skip if no one is assigned
+      
+      const baseQuantity = item.quantity > 0 ? item.quantity : totalAssignedQuantity;
+      const pricePerUnit = item.price / baseQuantity;
 
-      names.forEach(name => {
-        if (!personTotals[name]) {
-             personTotals[name] = { name, items: [], subtotal: 0, tax: 0, tip: 0, total: 0 };
+      Object.entries(quantitySplit).forEach(([name, quantity]) => {
+        if (quantity > 0) {
+          const priceForPerson = pricePerUnit * quantity;
+          if (personTotals[name]) {
+            personTotals[name].subtotal += priceForPerson;
+            personTotals[name].items.push({ name: `${item.name} (x${quantity})`, price: priceForPerson });
+          }
         }
-        personTotals[name].subtotal += pricePerPerson;
-        personTotals[name].items.push({ name: item.name, price: pricePerPerson });
+      });
+
+    } else if (simpleSplit && simpleSplit.length > 0) {
+      // Original logic for even split
+      const pricePerPerson = item.price / simpleSplit.length;
+      simpleSplit.forEach(name => {
+        if (personTotals[name]) {
+          personTotals[name].subtotal += pricePerPerson;
+          personTotals[name].items.push({ name: item.name, price: pricePerPerson });
+        }
       });
     }
   });
 
+
   // Calculate proportional tax and tip
   Object.keys(personTotals).forEach(name => {
     const person = personTotals[name];
-    if (receipt.subtotal > 0) {
-      const proportion = person.subtotal / receipt.subtotal;
+    const subtotalSum = Object.values(personTotals).reduce((sum, p) => sum + p.subtotal, 0);
+
+    if (subtotalSum > 0) {
+      const proportion = person.subtotal / subtotalSum;
       person.tax = receipt.tax * proportion;
       person.tip = receipt.tip * proportion;
     } else {
-      person.tax = 0;
-      person.tip = 0;
+      // If no items are assigned, split tax/tip evenly among all people
+      const numPeople = allPeopleInvolved.size || 1;
+      person.tax = receipt.tax / numPeople;
+      person.tip = receipt.tip / numPeople;
     }
     person.total = person.subtotal + person.tax + person.tip;
   });

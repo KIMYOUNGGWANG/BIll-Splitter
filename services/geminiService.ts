@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { ParsedReceipt, ReceiptItem, Assignments, AssignmentUpdate } from '../types';
+import { ParsedReceipt, ReceiptItem, Assignments, AssignmentUpdate, ChatMessage } from '../types';
 
 // Helper function to initialize the AI client on demand.
 // This ensures the latest API key from the environment is used for each request,
@@ -146,11 +146,20 @@ const assignmentCache = new Map<string, AssignmentUpdate>();
 export async function updateAssignments(
   userInput: string,
   items: ReceiptItem[],
-  currentAssignments: Assignments
+  currentAssignments: Assignments,
+  chatHistory: ChatMessage[]
 ): Promise<AssignmentUpdate> {
     const ai = getAiClient();
-    // 1. Caching: Create a unique key for the current state and input.
-    const cacheKey = JSON.stringify({ userInput, items: items.map(i => i.id), currentAssignments });
+
+    // Format the last few messages for context
+    const recentHistory = chatHistory
+      .filter(msg => msg.sender !== 'system') // Ignore system messages
+      .slice(-4) // Take the last 4 messages
+      .map(msg => `${msg.sender === 'user' ? 'User' : 'Assistant'}: ${msg.text}`)
+      .join('\n');
+
+    // Caching: Include recent history in the key
+    const cacheKey = JSON.stringify({ userInput, items: items.map(i => i.id), currentAssignments, recentHistory });
     if (assignmentCache.has(cacheKey)) {
         console.log("Returning cached assignment result.");
         return assignmentCache.get(cacheKey)!;
@@ -193,14 +202,18 @@ export async function updateAssignments(
 
   const prompt = `You are a bill splitting assistant. Your task is to update item assignments based on user requests and provide a conversational summary of what you did.
   
-You are given a list of items on a receipt, the current assignment state, and a user's command.
+You are given a recent chat history for context, a list of items on a receipt, the current assignment state, and a user's command. Use the chat history to understand context, such as who a pronoun like "he" or "they" refers to.
 
 You MUST respond ONLY with a JSON object. This object must contain two keys: "botResponse" and "assignments".
 1. "botResponse": A friendly, natural language string summarizing the changes you made.
 2. "assignments": An array of objects where each object represents an item from the receipt and has an "itemId" and a "names" array. Every single item from the original receipt MUST be present in your response. If an item is unassigned, its "names" array should be empty.
 
+Recent Chat History (for context):
+${recentHistory || 'No recent history.'}
+
 Current Items: ${JSON.stringify(lightweightItems, null, 2)}
 Current Assignments: ${JSON.stringify(currentAssignments, null, 2)}
+
 User Command: "${userInput}"
 
 Your response must be a valid JSON object that follows the specified structure.

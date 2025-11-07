@@ -324,8 +324,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, summary, active
             {messages.map((msg, index) => {
                if (msg.sender === 'system') {
                     return (
-                        <div key={index} className="text-center">
-                            <span className="text-xs text-text-secondary dark:text-text-secondary-dark bg-background dark:bg-background-dark px-2 py-1 rounded-full">{msg.text}</span>
+                        <div key={index} className="flex items-center justify-center gap-2 text-xs text-text-secondary dark:text-text-secondary-dark my-2">
+                          <div className="flex-grow border-t border-border dark:border-border-dark"></div>
+                          <span className="flex-shrink-0 italic text-center">{msg.text}</span>
+                          <div className="flex-grow border-t border-border dark:border-border-dark"></div>
                         </div>
                     )
                }

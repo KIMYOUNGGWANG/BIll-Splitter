@@ -59,6 +59,7 @@ export interface ReceiptSession {
   parsedReceipt: ParsedReceipt | null;
   receiptImage: string | null; // Data URL for the receipt image
   assignments: Assignments;
+  quantityAssignments: { [itemId: string]: { [person: string]: number } };
   assignmentsHistory: Assignments[]; // For multi-level undo functionality
   chatHistory: ChatMessage[];
   people: string[];
@@ -86,6 +87,9 @@ export type AppAction =
   | { type: 'DIRECT_ASSIGNMENT'; payload: { sessionId: string; itemId: string; newNames: string[] } }
   | { type: 'EDIT_PERSON_NAME'; payload: { sessionId: string; oldName: string; newName: string } }
   | { type: 'EDIT_ITEM'; payload: { sessionId: string; itemId: string; newName: string; newPrice: number } }
+  | { type: 'ADD_ITEM'; payload: { sessionId: string; name: string; price: number; quantity: number } }
+  | { type: 'DELETE_ITEM'; payload: { sessionId: string; itemId: string } }
+  | { type: 'SET_QUANTITY_ASSIGNMENT'; payload: { sessionId: string; itemId: string; quantities: { [person: string]: number } } }
   | { type: 'EDIT_TOTALS'; payload: { sessionId: string; newSubtotal: number; newTax: number; newTip: number } }
   | { type: 'ASSIGN_ALL_UNASSIGNED'; payload: { sessionId: string; personName: string } }
   | { type: 'SPLIT_ALL_EQUALLY'; payload: { sessionId: string } }
